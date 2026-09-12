@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: robinhood-agent
+  namespace: robinhood
+  labels:
+    app: robinhood-agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: robinhood-agent
+  template:
+    metadata:
+      labels:
+        app: robinhood-agent
+    spec:
+      containers:
+        - name: agent
+          image: hmoghani/robinhood-agent:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: robinhood-agent-config
+            - secretRef:
+                name: robinhood-agent-secret
+          volumeMounts:
+            - name: auth-volume
+              mountPath: /root/.mcp-auth
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: auth-volume
+          persistentVolumeClaim:
+            claimName: robinhood-auth-pvc

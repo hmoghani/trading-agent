@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Access - Robinhood Agentic Trading</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            rhGreen: '#00c805',
+            rhGreenHover: '#00b004',
+            rhDark: '#0b0e11',
+            rhCard: '#151a21',
+            rhBorder: '#232a34',
+            rhMuted: '#8b949e',
+            rhRed: '#ff5000',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-rhDark text-gray-100 min-h-screen flex items-center justify-center p-4 selection:bg-rhGreen selection:text-black">
+
+  <div class="w-full max-w-sm bg-rhCard border border-rhBorder rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+    <!-- Top glow accent line -->
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-1 bg-gradient-to-r from-transparent via-rhGreen to-transparent opacity-80"></div>
+
+    <!-- Branding Header -->
+    <div class="flex flex-col items-center text-center mb-6">
+      <div class="w-14 h-14 rounded-2xl bg-rhGreen/10 border border-rhGreen/30 flex items-center justify-center mb-3.5 shadow-inner shadow-rhGreen/20">
+        <!-- Robinhood Feather SVG icon -->
+        <svg class="w-7 h-7 text-rhGreen" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12.001 2C7.305 2 3.5 5.805 3.5 10.5c0 3.298 1.884 6.16 4.636 7.587l.004-.002.36.185V22l3.5-2.5 3.5 2.5v-3.73l.36-.185.004.002C18.616 16.66 20.5 13.798 20.5 10.5 20.5 5.805 16.695 2 12.001 2zm0 2c3.59 0 6.5 2.91 6.5 6.5 0 2.585-1.508 4.821-3.69 5.875L12 17.75l-2.81-1.375C7.008 15.321 5.5 13.085 5.5 10.5 5.5 6.91 8.41 4 12 4z"/>
+        </svg>
+      </div>
+      <h1 class="text-xl font-bold tracking-tight text-white">Agentic Trading Platform</h1>
+      <p class="text-xs text-rhMuted mt-1">Autonomous Execution & Market Copilot</p>
+    </div>
+
+    <!-- Error Alert Box -->
+    <div id="error-alert" class="hidden mb-5 p-3 rounded-xl bg-rhRed/10 border border-rhRed/30 text-xs text-rhRed leading-relaxed"></div>
+
+    <!-- Login Form -->
+    <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+      <div>
+        <label for="password" class="block text-xs font-semibold text-gray-300 mb-1.5">Master Passcode</label>
+        <div class="relative">
+          <input
+            id="password"
+            type="password"
+            required
+            autocomplete="current-password"
+            autofocus
+            placeholder="Enter operator master password"
+            class="w-full bg-rhDark border border-rhBorder rounded-xl px-4 py-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-rhGreen focus:ring-1 focus:ring-rhGreen transition pr-10"
+          />
+          <button
+            type="button"
+            onclick="togglePasswordVisibility()"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus:outline-none"
+            tabindex="-1"
+          >
+            <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button
+        id="submit-btn"
+        type="submit"
+        class="w-full py-3 px-4 rounded-xl bg-rhGreen text-black font-bold text-xs hover:bg-rhGreenHover active:scale-[0.99] transition-all duration-150 flex items-center justify-center gap-2 shadow-lg shadow-rhGreen/10 cursor-pointer mt-2"
+      >
+        <span id="btn-text">Unlock Dashboard</span>
+      </button>
+    </form>
+
+    <!-- Footer / Security Note -->
+    <div class="mt-6 pt-5 border-t border-rhBorder/70 text-center">
+      <div class="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
+        <svg class="w-3.5 h-3.5 text-rhGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+        </svg>
+        <span>Encrypted Cluster Session</span>
+      </div>
+      <p class="text-[10px] text-gray-500 mt-1.5 font-mono">Agentic Trading System</p>
+    </div>
+  </div>
+
+  <script>
+    function togglePasswordVisibility() {
+      const pwdInput = document.getElementById('password');
+      const isPwd = pwdInput.type === 'password';
+      pwdInput.type = isPwd ? 'text' : 'password';
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const password = document.getElementById('password').value;
+      const submitBtn = document.getElementById('submit-btn');
+      const btnText = document.getElementById('btn-text');
+      const alertBox = document.getElementById('error-alert');
+
+      alertBox.classList.add('hidden');
+      alertBox.innerText = '';
+      submitBtn.disabled = true;
+      btnText.innerText = 'Verifying...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.status === 'success') {
+          btnText.innerText = 'Access Granted!';
+          submitBtn.classList.remove('bg-rhGreen', 'hover:bg-rhGreenHover');
+          submitBtn.classList.add('bg-green-500');
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 300);
+        } else {
+          alertBox.innerText = data.detail || 'Incorrect master password. Please try again.';
+          alertBox.classList.remove('hidden');
+          submitBtn.disabled = false;
+          btnText.innerText = 'Unlock Dashboard';
+          document.getElementById('password').focus();
+        }
+      } catch (err) {
+        alertBox.innerText = 'Network error communicating with authentication service.';
+        alertBox.classList.remove('hidden');
+        submitBtn.disabled = false;
+        btnText.innerText = 'Unlock Dashboard';
+      }
+    }
+  </script>
+</body>
+</html>

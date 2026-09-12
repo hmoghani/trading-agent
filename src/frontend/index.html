@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robinhood Agentic Trading Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Official TradingView Lightweight Charts Library -->
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            rhGreen: '#00c805',
+            rhGreenHover: '#00e006',
+            rhDark: '#0b0e11',
+            rhCard: '#151a21',
+            rhCardLighter: '#1d232c',
+            rhBorder: '#232a34',
+            rhBorderHover: '#374151',
+            rhRed: '#ff5000',
+            rhRedHover: '#ff621f',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #232a34; border-radius: 4px; }
+    .tab-pill.active {
+      background-color: #00c805;
+      color: #000000;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body class="bg-rhDark text-gray-100 min-h-screen flex flex-col antialiased">
+
+  <!-- Unfunded Live Account Alert Banner -->
+  <div id="unfunded-live-banner" class="hidden bg-amber-500/15 border-b border-amber-500/30 px-6 py-2.5 text-amber-300 flex items-center justify-between text-xs z-50">
+    <div class="flex items-center gap-2.5">
+      <span class="text-base">⚠️</span>
+      <span><strong>Live Brokerage Account Unfunded ($0.00 Buying Power):</strong> Your real Robinhood account has not been funded yet. Live orders are blocked until funds are deposited.</span>
+    </div>
+    <button onclick="setEnvironment('paper')" class="px-3 py-1 bg-amber-400 text-black hover:bg-amber-300 rounded-lg text-xs font-bold transition shadow cursor-pointer">
+      Switch to Paper Trading 🧪
+    </button>
+  </div>
+
+  <!-- Circuit Breaker Emergency Banner -->
+  <div id="circuit-breaker-banner" class="hidden bg-red-600/90 border-b border-red-500 px-6 py-2.5 text-white flex items-center justify-between text-xs font-semibold animate-pulse z-50">
+    <div class="flex items-center gap-2">
+      <span class="text-base">🚨</span>
+      <span>CIRCUIT BREAKER ACTIVE: Daily portfolio drawdown limit was breached. Automated buy executions are locked.</span>
+    </div>
+    <button onclick="resetCircuitBreaker()" class="px-3 py-1 bg-white text-red-700 hover:bg-gray-100 rounded-lg text-xs font-bold transition shadow cursor-pointer">
+      Reset Circuit Breaker
+    </button>
+  </div>
+
+  <!-- Main Top Navbar -->
+  <header class="border-b border-rhBorder bg-rhCard/95 backdrop-blur sticky top-0 z-40 px-6 py-3 flex items-center justify-between gap-4">
+    
+    <!-- Left: Brand & Environment Selector -->
+    <div class="flex items-center gap-4 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-rhGreen/10 border border-rhGreen/30 flex items-center justify-center text-rhGreen font-bold text-lg">
+          RH
+        </div>
+        <div class="hidden sm:block">
+          <h1 class="font-bold text-sm tracking-wide text-white">Robinhood Terminal</h1>
+          <p class="text-[11px] text-gray-400">Autonomous &bull; Multi-Agent</p>
+        </div>
+      </div>
+
+      <!-- Prominent Environment Toggle Switch -->
+      <div class="flex items-center bg-rhDark border border-rhBorder rounded-xl p-1 text-xs">
+        <button
+          id="env-btn-paper"
+          onclick="setEnvironment('paper')"
+          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-rhGreen text-black shadow-sm cursor-pointer"
+        >
+          <span>🧪 Paper ($100k)</span>
+        </button>
+        <button
+          id="env-btn-live"
+          onclick="setEnvironment('live')"
+          class="px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 text-gray-400 hover:text-white cursor-pointer"
+        >
+          <span>⚡ Live Brokerage</span>
+        </button>
+      </div>
+
+      <!-- Live Account Selector (Visible in Live Mode) -->
+      <div id="live-account-selector-container" class="hidden flex items-center">
+        <select
+          id="live-account-select"
+          onchange="onLiveAccountChange(this.value)"
+          class="bg-rhDark border border-amber-500/40 text-amber-300 text-xs rounded-xl px-3 py-1.5 font-medium focus:outline-none focus:border-amber-400 cursor-pointer"
+          title="Select active Robinhood brokerage account"
+        >
+          <option value="">Loading Robinhood Accounts...</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Center: Universal Symbol Search Bar -->
+    <div class="flex-1 max-w-md relative">
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+        <input
+          id="global-search-input"
+          type="text"
+          oninput="handleSearchInput(this.value)"
+          onfocus="handleSearchFocus()"
+          placeholder="Search stock ticker (e.g. NVDA, AAPL, PLTR, AMD, TSLA)..."
+          class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 pl-9 pr-8 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-rhGreen transition"
+        />
+        <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
+          <kbd class="text-[10px] bg-rhBorder px-1.5 py-0.5 rounded text-gray-400 font-mono">/</kbd>
+        </div>
+      </div>
+
+      <!-- Autocomplete Dropdown Menu -->
+      <div id="search-dropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-rhCard border border-rhBorder rounded-xl shadow-2xl z-50 max-h-72 overflow-y-auto scrollbar-thin divide-y divide-rhBorder/50">
+        <!-- Dynamically populated -->
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="flex items-center gap-3 shrink-0">
+      <!-- Market Hours Status Badge -->
+      <div id="market-status-badge" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-rhBorder bg-rhDark text-gray-400" title="Checking Market Status...">
+        <span id="market-status-dot" class="w-2 h-2 rounded-full bg-gray-500"></span>
+        <span id="market-status-text">Checking Market...</span>
+      </div>
+
+      <!-- Strategy Selector Dropdown -->
+      <div class="relative flex items-center">
+        <select
+          id="global-strategy-select"
+          onchange="onStrategyChange(this.value)"
+          class="bg-rhDark border border-rhBorder text-xs rounded-lg px-2.5 py-1.5 font-semibold text-gray-200 focus:outline-none focus:border-rhGreen cursor-pointer hover:border-gray-500 transition max-w-[220px] truncate"
+          title="Switch Active Trading Strategy"
+        >
+          <option value="momentum_dip_buyer">🎯 Momentum Dip Buyer [Moderate]</option>
+          <option value="smart_dca">🌊 Smart DCA [Low]</option>
+          <option value="orb_breakout">⚡ ORB Breakout [High]</option>
+          <option value="rvol_squeeze">🚀 RVOL Squeeze [High]</option>
+          <option value="directional_options">📈 Directional Options [Very High]</option>
+          <option value="zero_dte_scalper">🔥 0DTE Scalper [Ultra]</option>
+          <option value="pairs_divergence">⚖️ Pairs Arbitrage [Quant]</option>
+          <option value="portfolio_rebalancer">⚖️ Rebalancer [Low]</option>
+        </select>
+      </div>
+
+      <button id="btn-engine-toggle" onclick="toggleEngine()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rhGreen/20 text-rhGreen border border-rhGreen/40 hover:bg-rhGreen/30 transition flex items-center gap-1.5 cursor-pointer">
+        <span class="w-2 h-2 rounded-full bg-rhGreen animate-pulse"></span>
+        <span id="engine-status-text">Engine Active</span>
+      </button>
+
+      <button onclick="triggerScan()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rhBorder hover:bg-gray-700 text-gray-200 transition cursor-pointer">
+        Scan Now
+      </button>
+
+      <button onclick="openSettingsModal()" class="p-2 rounded-lg bg-rhCard border border-rhBorder hover:bg-rhBorder text-gray-300 hover:text-white transition cursor-pointer" title="Settings">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </button>
+
+      <button onclick="handleLogout()" title="Sign Out" class="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+        </svg>
+      </button>
+    </div>
+
+  </header>
+
+  <!-- Metrics Bar (Dynamically switches between Paper & Live) -->
+  <div class="border-b border-rhBorder bg-rhDark/60 px-6 py-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-rhCard/70 border border-rhBorder rounded-xl p-3">
+      <div class="flex items-center justify-between text-xs text-gray-400 font-medium">
+        <span id="metric-equity-label">Portfolio Equity (Paper)</span>
+        <span id="metric-env-tag" class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold">PAPER</span>
+      </div>
+      <div id="stat-equity" class="text-xl font-bold mt-1 text-white font-mono">$100,000.00</div>
+      <div id="stat-pnl" class="text-xs font-medium mt-0.5 text-rhGreen font-mono">+$0.00 (0.00%)</div>
+    </div>
+
+    <div class="bg-rhCard/70 border border-rhBorder rounded-xl p-3">
+      <div class="text-xs text-gray-400 font-medium">Buying Power</div>
+      <div id="stat-bp" class="text-xl font-bold mt-1 text-white font-mono">$100,000.00</div>
+      <div id="stat-bp-sub" class="text-xs text-gray-400 mt-0.5">Available Cash</div>
+    </div>
+
+    <div class="bg-rhCard/70 border border-rhBorder rounded-xl p-3">
+      <div class="text-xs text-gray-400 font-medium">Open Positions</div>
+      <div id="stat-pos-count" class="text-xl font-bold mt-1 text-white font-mono">0</div>
+      <div id="stat-pos-sub" class="text-xs text-gray-400 mt-0.5">Active holdings</div>
+    </div>
+
+    <div class="bg-rhCard/70 border border-rhBorder rounded-xl p-3 flex items-center justify-between">
+      <div>
+        <div class="text-xs text-gray-400 font-medium">Environment Management</div>
+        <div id="stat-strategy-name" class="text-sm font-semibold mt-1 text-gray-200">Momentum & Dip-Buyer</div>
+        <div id="stat-strategy-sub" class="text-xs text-gray-400 mt-0.5">Autonomous mode</div>
+      </div>
+      <button
+        id="btn-paper-reset"
+        onclick="resetPaperWallet()"
+        class="px-2.5 py-1 text-[11px] rounded-lg bg-rhBorder hover:bg-gray-700 text-gray-300 transition cursor-pointer"
+        title="Reset paper balance to $100k"
+      >
+        Reset Paper
+      </button>
+    </div>
+  </div>
+
+  <!-- Workspace Navigation Pills -->
+  <div class="bg-rhCard/40 border-b border-rhBorder px-6 py-2 flex items-center justify-between">
+    <div class="flex items-center gap-2 overflow-x-auto scrollbar-thin py-0.5">
+      <button id="tab-btn-chart" onclick="switchMainTab('chart')" class="tab-pill active px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer">
+        📈 Chart & Positions
+      </button>
+      <button id="tab-btn-orders" onclick="switchMainTab('orders')" class="tab-pill px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer">
+        📜 Order History
+      </button>
+      <button id="tab-btn-council" onclick="switchMainTab('council')" class="tab-pill px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer">
+        🏛️ Multi-Agent Deliberation
+      </button>
+      <button id="tab-btn-options" onclick="switchMainTab('options')" class="tab-pill px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer">
+        ⚡ Options & Wheel
+      </button>
+      <button id="tab-btn-scanner" onclick="switchMainTab('scanner')" class="tab-pill px-3.5 py-1.5 rounded-lg text-xs font-medium text-gray-300 hover:text-white transition cursor-pointer">
+        🎯 Market Screener
+      </button>
+    </div>
+    <div class="text-[11px] text-gray-400 hidden md:flex items-center gap-2">
+      <span id="active-symbol-indicator" class="font-mono text-rhGreen font-bold">SPY</span>
+      <span class="text-gray-600">&bull;</span>
+      <span id="active-env-indicator" class="text-emerald-400">Paper Mode</span>
+    </div>
+  </div>
+
+  <!-- Main Grid Workspace -->
+  <main class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+
+    <!-- Left Column: Chart & Active Tab Activity (8 cols) -->
+    <div class="lg:col-span-8 flex flex-col gap-6">
+
+      <!-- Active Symbol Overview & Quick Watchlist Bar -->
+      <div class="bg-rhCard border border-rhBorder rounded-2xl p-4 flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <span id="active-symbol-badge" class="px-3 py-1 rounded-xl bg-rhGreen/10 border border-rhGreen/30 text-rhGreen font-black text-lg">
+              SPY
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span id="active-company-name" class="font-bold text-white text-base">SPDR S&P 500 ETF Trust</span>
+                <span id="active-sector-tag" class="text-[10px] px-2 py-0.5 rounded-full bg-rhDark text-gray-400 border border-rhBorder">Index ETF</span>
+              </div>
+              <div class="flex items-baseline gap-2 mt-0.5">
+                <span id="chart-price-display" class="font-extrabold text-2xl text-white font-mono">$585.20</span>
+                <span id="chart-change-display" class="text-xs font-semibold text-rhGreen font-mono">+1.80 (+0.31%)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Timeframe Buttons -->
+          <div class="flex items-center gap-1 bg-rhDark border border-rhBorder rounded-xl p-1 text-xs">
+            <button id="tf-1D" onclick="setChartTimeframe('1D')" class="px-3 py-1 rounded-lg bg-rhBorder text-white font-bold cursor-pointer">1D</button>
+            <button id="tf-1W" onclick="setChartTimeframe('1W')" class="px-3 py-1 rounded-lg text-gray-400 hover:text-white cursor-pointer">1W</button>
+            <button id="tf-1M" onclick="setChartTimeframe('1M')" class="px-3 py-1 rounded-lg text-gray-400 hover:text-white cursor-pointer">1M</button>
+            <button id="tf-1Y" onclick="setChartTimeframe('1Y')" class="px-3 py-1 rounded-lg text-gray-400 hover:text-white cursor-pointer">1Y</button>
+          </div>
+        </div>
+
+        <!-- Quick Symbol Picker Bar -->
+        <div class="flex items-center gap-1.5 pt-2 border-t border-rhBorder/60 overflow-x-auto scrollbar-thin text-xs">
+          <span class="text-gray-500 text-[11px] font-medium shrink-0">Popular:</span>
+          <button onclick="selectSymbol('SPY')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">SPY</button>
+          <button onclick="selectSymbol('QQQ')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">QQQ</button>
+          <button onclick="selectSymbol('NVDA')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">NVDA</button>
+          <button onclick="selectSymbol('AAPL')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">AAPL</button>
+          <button onclick="selectSymbol('TSLA')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">TSLA</button>
+          <button onclick="selectSymbol('MSFT')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">MSFT</button>
+          <button onclick="selectSymbol('PLTR')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">PLTR</button>
+          <button onclick="selectSymbol('AMD')" class="px-2.5 py-1 rounded-lg bg-rhDark hover:bg-rhBorder text-gray-300 font-mono transition cursor-pointer">AMD</button>
+        </div>
+
+        <!-- Interactive TradingView Candlestick Chart -->
+        <div id="tv-chart-container" class="w-full h-80 relative rounded-xl overflow-hidden bg-rhDark">
+          <div id="chart-loading" class="absolute inset-0 flex items-center justify-center text-xs text-gray-500">
+            Loading interactive candlestick chart...
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 1: Holdings & Positions Section -->
+      <div id="view-tab-chart" class="flex flex-col gap-6">
+        <div class="bg-rhCard border border-rhBorder rounded-2xl p-4">
+          <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📦</span>
+              <h2 class="text-sm font-bold text-white">Active Positions (<span id="positions-mode-label">Paper</span>)</h2>
+            </div>
+            <span id="positions-count-badge" class="text-xs px-2.5 py-0.5 rounded-full bg-rhDark border border-rhBorder text-gray-300">0 Positions</span>
+          </div>
+
+          <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="text-gray-400 border-b border-rhBorder pb-2">
+                  <th class="py-2.5">Symbol</th>
+                  <th>Shares</th>
+                  <th>Avg Price</th>
+                  <th>Current</th>
+                  <th>Market Value</th>
+                  <th class="text-right">Return</th>
+                  <th class="text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="holdings-tbody" class="divide-y divide-rhBorder/50 font-mono">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: Order History Section -->
+      <div id="view-tab-orders" class="hidden flex flex-col gap-6">
+        <div class="bg-rhCard border border-rhBorder rounded-2xl p-4">
+          <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📜</span>
+              <h2 class="text-sm font-bold text-white">Execution History (<span id="orders-mode-label">Paper</span>)</h2>
+            </div>
+            <span class="text-xs text-gray-400">Chronological ledger</span>
+          </div>
+
+          <div id="orders-history-list" class="mt-3 space-y-2.5 max-h-[500px] overflow-y-auto scrollbar-thin text-xs">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Multi-Agent Deliberation Council -->
+      <div id="view-tab-council" class="hidden flex flex-col gap-6">
+        <div class="bg-rhCard border border-rhBorder rounded-2xl p-4">
+          <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🏛️</span>
+              <div>
+                <h2 class="text-sm font-bold text-white">Multi-Agent Deliberation Council</h2>
+                <p class="text-[11px] text-gray-400">Bull Analyst &bull; Bear Skeptic &bull; Risk Officer Consensus</p>
+              </div>
+            </div>
+            <button onclick="triggerScan()" class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rhGreen text-black hover:bg-rhGreenHover transition cursor-pointer">
+              Deliberate Market Now
+            </button>
+          </div>
+
+          <div id="council-stream-list" class="mt-4 flex flex-col gap-4 max-h-[580px] overflow-y-auto scrollbar-thin">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: Options & Wheel Strategy -->
+      <div id="view-tab-options" class="hidden flex flex-col gap-6">
+        <div class="bg-rhCard border border-rhBorder rounded-2xl p-4">
+          <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">⚡</span>
+              <div>
+                <h2 class="text-sm font-bold text-white">Options Engine: The Wheel Strategy</h2>
+                <p class="text-[11px] text-gray-400">Covered Call harvest & Cash-Secured Put setups for <strong id="options-active-sym" class="text-white">SPY</strong></p>
+              </div>
+            </div>
+            <button onclick="loadOptionsRecommendations()" class="px-3 py-1 rounded-lg text-xs font-medium bg-rhBorder text-gray-300 hover:text-white transition cursor-pointer">
+              Refresh Chains
+            </button>
+          </div>
+
+          <div id="options-recommendations-list" class="mt-4 flex flex-col gap-4">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: Market Screener -->
+      <div id="view-tab-scanner" class="hidden flex flex-col gap-6">
+        <div class="bg-rhCard border border-rhBorder rounded-2xl p-4">
+          <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🎯</span>
+              <div>
+                <h2 class="text-sm font-bold text-white">Market Opportunity Screener</h2>
+                <p class="text-[11px] text-gray-400">Real-time RSI dip & volume breakout setups</p>
+              </div>
+            </div>
+            <button onclick="loadMarketScans()" class="px-3 py-1 rounded-lg text-xs font-medium bg-rhBorder text-gray-300 hover:text-white transition cursor-pointer">
+              Re-Scan Universe
+            </button>
+          </div>
+
+          <div id="scanner-grid" class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Interactive Order Desk & Gemini Copilot (4 cols) -->
+    <div class="lg:col-span-4 flex flex-col gap-6">
+
+      <!-- Interactive Order Desk Card -->
+      <div class="bg-rhCard border border-rhBorder rounded-2xl p-5 shadow-lg flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-rhGreen"></span>
+            <h2 class="text-sm font-bold text-white">Order Desk</h2>
+          </div>
+          <span id="order-desk-env-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            PAPER TRADING
+          </span>
+        </div>
+
+        <!-- Buy / Sell Mode Toggle -->
+        <div class="grid grid-cols-2 gap-2 mt-4 bg-rhDark p-1 rounded-xl border border-rhBorder text-xs">
+          <button id="btn-side-buy" onclick="setOrderSide('buy')" class="py-2 rounded-lg font-bold bg-rhGreen text-black transition cursor-pointer">
+            Buy
+          </button>
+          <button id="btn-side-sell" onclick="setOrderSide('sell')" class="py-2 rounded-lg font-bold text-gray-400 hover:text-white transition cursor-pointer">
+            Sell
+          </button>
+        </div>
+
+        <!-- Order Form Details -->
+        <div class="mt-4 space-y-3.5 text-xs">
+          <div>
+            <label class="block text-gray-400 mb-1 font-medium">Selected Asset</label>
+            <div class="flex items-center justify-between bg-rhDark border border-rhBorder rounded-xl px-3.5 py-2">
+              <span id="order-symbol-display" class="font-bold text-white text-sm font-mono">SPY</span>
+              <span id="order-price-display" class="text-gray-400 font-mono">$585.20</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-gray-400 font-medium">Order Value ($ USD)</label>
+              <span id="order-max-helper" class="text-[11px] text-gray-500 font-mono">Max: $100.00</span>
+            </div>
+            <div class="relative">
+              <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-sm">$</span>
+              <input
+                id="order-amount-input"
+                type="number"
+                step="10"
+                min="1"
+                value="50"
+                oninput="updateOrderEstimate()"
+                class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 pl-8 pr-3 text-sm text-white font-mono focus:outline-none focus:border-rhGreen"
+              />
+            </div>
+          </div>
+
+          <!-- Estimated Shares Output -->
+          <div class="p-3 rounded-xl bg-rhDark/60 border border-rhBorder flex items-center justify-between text-[11px] text-gray-400 font-mono">
+            <span>Estimated Shares:</span>
+            <span id="order-est-shares" class="text-white font-bold">0.0854 shares</span>
+          </div>
+
+          <!-- Market Closed Warning inside Order Desk (Live mode only) -->
+          <div id="order-market-closed-warning" class="hidden p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] leading-relaxed">
+            ⏰ <strong>Market Closed:</strong> Live trading is restricted strictly to Regular Trading Hours (9:30 AM – 4:00 PM ET, Mon–Fri). Orders will resume <span id="market-closed-next-open" class="font-bold text-amber-200">Monday at 9:30 AM ET</span>. Use Paper mode to practice anytime.
+          </div>
+
+          <!-- Unfunded Live Account Warning inside Order Desk -->
+          <div id="order-unfunded-warning" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[11px] leading-relaxed">
+            ⚠️ <strong>Account Unfunded:</strong> Your live Robinhood account has $0.00 buying power. Deposit funds or switch to Paper mode above.
+          </div>
+
+          <!-- Submit Order Button -->
+          <button
+            id="btn-submit-order"
+            onclick="submitOrderDeskTrade()"
+            class="w-full py-3 rounded-xl font-extrabold text-xs bg-rhGreen text-black hover:bg-rhGreenHover transition shadow-lg shadow-rhGreen/10 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span id="submit-order-text">Execute Paper Buy Order</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Gemini Copilot Assistant -->
+      <div class="bg-rhCard border border-rhBorder rounded-2xl p-4 flex-1 flex flex-col min-h-[380px]">
+        <div class="flex items-center justify-between pb-3 border-b border-rhBorder">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-md bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold text-xs">
+              AI
+            </div>
+            <h2 class="text-sm font-bold text-white">Gemini Copilot</h2>
+          </div>
+          <span class="text-[11px] text-purple-400 font-mono">gemini-2.0-flash</span>
+        </div>
+
+        <div id="chat-messages" class="mt-3 flex-1 overflow-y-auto space-y-3 max-h-60 scrollbar-thin text-xs pr-1">
+          <div class="flex gap-2.5">
+            <div class="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-[10px] shrink-0">
+              AI
+            </div>
+            <div class="bg-rhDark/70 border border-rhBorder p-2.5 rounded-lg text-gray-300 max-w-[88%] leading-relaxed">
+              Welcome to the upgraded <strong>Robinhood Trading Terminal</strong>. You can search any stock, practice with \$100k paper cash, or review real Robinhood accounts safely. What shall we analyze?
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick prompt chips -->
+        <div class="flex flex-wrap gap-1.5 my-2.5">
+          <button onclick="sendQuickPrompt('Evaluate current market momentum for NVDA')" class="text-[11px] px-2.5 py-1 rounded-full bg-rhDark border border-rhBorder text-gray-300 hover:text-white transition cursor-pointer">
+            NVDA Analysis
+          </button>
+          <button onclick="sendQuickPrompt('What is our paper portfolio performance?')" class="text-[11px] px-2.5 py-1 rounded-full bg-rhDark border border-rhBorder text-gray-300 hover:text-white transition cursor-pointer">
+            Portfolio Health
+          </button>
+        </div>
+
+        <!-- Chat form -->
+        <form onsubmit="handleChatSubmit(event)" class="flex gap-2 mt-1">
+          <input
+            id="chat-input"
+            type="text"
+            placeholder="Ask strategy questions or query stocks..."
+            class="flex-1 bg-rhDark border border-rhBorder rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-rhGreen transition"
+          />
+          <button
+            type="submit"
+            class="px-3.5 py-2 rounded-lg bg-rhGreen text-black font-bold text-xs hover:bg-green-400 transition cursor-pointer"
+          >
+            Send
+          </button>
+        </form>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div class="bg-rhCard border border-rhBorder rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl">
+      <div class="px-6 py-4 border-b border-rhBorder flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-rhGreen/10 border border-rhGreen/30 flex items-center justify-center text-rhGreen font-bold">
+            ⚙️
+          </div>
+          <div>
+            <h3 class="font-bold text-sm text-white">Engine & Safety Settings</h3>
+            <p class="text-xs text-gray-400">Configure risk boundaries and whitelist</p>
+          </div>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-rhBorder transition cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block text-gray-400 mb-1 font-medium">Default Execution Environment</label>
+          <select id="setting-env-select" class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-rhGreen">
+            <option value="paper">Paper Trading ($100k Virtual Simulation)</option>
+            <option value="live">Live Brokerage Account (Real Robinhood Capital)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-gray-400 mb-1 font-medium">Execution Mode</label>
+          <select id="setting-execution-mode" class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-rhGreen">
+            <option value="autonomous">Autonomous (Hands-Free Execution)</option>
+            <option value="supervised">Supervised (Interactive Cards Approval)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-gray-400 mb-1 font-medium">Active Strategy Algorithm</label>
+          <select id="setting-active-strategy" class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-rhGreen">
+            <option value="momentum_dip_buyer">🎯 Momentum Dip Buyer (Moderate)</option>
+            <option value="smart_dca">🌊 Smart DCA (Low Risk)</option>
+            <option value="orb_breakout">⚡ Opening Range Breakout (High)</option>
+            <option value="rvol_squeeze">🚀 RVOL Squeeze & Breakout (High)</option>
+            <option value="directional_options">📈 Directional Options Momentum (Very High)</option>
+            <option value="zero_dte_scalper">🔥 0DTE SPY/QQQ Scalper (Ultra-Aggressive)</option>
+            <option value="pairs_divergence">⚖️ Statistical Arbitrage / Pairs (Quant)</option>
+            <option value="portfolio_rebalancer">⚖️ Target Allocation Rebalancer (Low)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-gray-400 mb-1 font-medium">Max Order Cap ($)</label>
+            <input
+              id="setting-max-order"
+              type="number"
+              step="10"
+              class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white font-mono focus:outline-none focus:border-rhGreen"
+            />
+          </div>
+          <div>
+            <label class="block text-gray-400 mb-1 font-medium">Daily Cumulative Spend ($)</label>
+            <input
+              id="setting-daily-limit"
+              type="number"
+              step="25"
+              class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white font-mono focus:outline-none focus:border-rhGreen"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-gray-400 mb-1 font-medium">Approved Asset Whitelist</label>
+          <input
+            id="setting-whitelist"
+            type="text"
+            class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white font-mono uppercase focus:outline-none focus:border-rhGreen"
+          />
+        </div>
+      </div>
+
+      <div class="px-6 py-4 border-t border-rhBorder flex items-center justify-end gap-3 bg-rhDark/60">
+        <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl text-xs font-semibold text-gray-400 hover:text-white transition cursor-pointer">
+          Cancel
+        </button>
+        <button onclick="saveSettingsForm()" class="px-5 py-2 rounded-xl text-xs font-bold bg-rhGreen text-black hover:bg-rhGreenHover transition cursor-pointer">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Terminal Logic -->
+  <script>
+    let activeEnvironment = "paper"; // 'paper' or 'live'
+    let userAccounts = [];
+    let selectedAccount = null;
+    let activeSymbol = "SPY";
+    let activeTimeframe = "1D";
+    let activeOrderSide = "buy";
+    let currentQuotePrice = 585.20;
+    let chartInstance = null;
+    let candleSeries = null;
+    let volumeSeries = null;
+    let searchDebounceTimer = null;
+    let latestMarketStatus = null;
+
+    async function loadAccountsList() {
+      try {
+        const res = await fetch('/api/accounts');
+        if (res.ok) {
+          userAccounts = await res.json();
+          const select = document.getElementById('live-account-select');
+          if (select && userAccounts.length > 0) {
+            select.innerHTML = userAccounts.map(acc => {
+              const badge = acc.agentic_allowed ? '🤖 AI Allowed' : '👁️ Personal';
+              const bal = `$${acc.total_equity.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+              return `<option value="${acc.account_number}" ${acc.is_active ? 'selected' : ''}>
+                ${acc.nickname} (${acc.display_account}) • ${bal} [${badge}]
+              </option>`;
+            }).join('');
+            const activeAcc = userAccounts.find(a => a.is_active) || userAccounts[0];
+            selectedAccount = activeAcc.account_number;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load accounts", e);
+      }
+    }
+
+    async function onLiveAccountChange(accNum) {
+      selectedAccount = accNum;
+      document.getElementById('stat-equity').innerText = "...";
+      document.getElementById('stat-bp').innerText = "...";
+      await fetch('/api/accounts/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_number: accNum })
+      });
+      await loadDashboardData();
+    }
+
+    // Environment Toggle
+    async function setEnvironment(env) {
+      activeEnvironment = env;
+      const isPaper = env === "paper";
+
+      // Toggle account dropdown visibility
+      const acctContainer = document.getElementById('live-account-selector-container');
+      if (acctContainer) {
+        if (isPaper) {
+          acctContainer.classList.add('hidden');
+          document.getElementById('stat-equity').innerText = "$100,000.00";
+          document.getElementById('stat-bp').innerText = "$100,000.00";
+        } else {
+          acctContainer.classList.remove('hidden');
+          document.getElementById('stat-equity').innerText = "...";
+          document.getElementById('stat-bp').innerText = "...";
+          await loadAccountsList();
+        }
+      }
+
+      // Update navbar toggle buttons
+      const btnPaper = document.getElementById('env-btn-paper');
+      const btnLive = document.getElementById('env-btn-live');
+      if (isPaper) {
+        btnPaper.className = "px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-rhGreen text-black shadow-sm cursor-pointer";
+        btnLive.className = "px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 text-gray-400 hover:text-white cursor-pointer";
+      } else {
+        btnLive.className = "px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 bg-amber-400 text-black shadow-sm cursor-pointer";
+        btnPaper.className = "px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 text-gray-400 hover:text-white cursor-pointer";
+      }
+
+      // Update Order Desk badge & button
+      const deskBadge = document.getElementById('order-desk-env-badge');
+      const submitText = document.getElementById('submit-order-text');
+      const submitBtn = document.getElementById('btn-submit-order');
+      const unfundedWarn = document.getElementById('order-unfunded-warning');
+
+      if (isPaper) {
+        deskBadge.innerText = "PAPER TRADING";
+        deskBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+        submitText.innerText = `Execute Paper ${activeOrderSide.toUpperCase()} Order`;
+        submitBtn.disabled = false;
+        submitBtn.className = "w-full py-3 rounded-xl font-extrabold text-xs bg-rhGreen text-black hover:bg-rhGreenHover transition shadow-lg shadow-rhGreen/10 flex items-center justify-center gap-2 cursor-pointer";
+        unfundedWarn.classList.add('hidden');
+      } else {
+        deskBadge.innerText = "LIVE BROKERAGE";
+        deskBadge.className = "text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30";
+        submitText.innerText = `Execute Live ${activeOrderSide.toUpperCase()} Order`;
+      }
+
+      // Update metric labels
+      document.getElementById('metric-equity-label').innerText = `Portfolio Equity (${isPaper ? 'Paper' : 'Live'})`;
+      document.getElementById('metric-env-tag').innerText = isPaper ? 'PAPER' : 'LIVE';
+      document.getElementById('metric-env-tag').className = isPaper ? 'text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-bold' : 'text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 font-bold';
+      document.getElementById('positions-mode-label').innerText = isPaper ? 'Paper' : 'Live';
+      document.getElementById('orders-mode-label').innerText = isPaper ? 'Paper' : 'Live';
+      document.getElementById('active-env-indicator').innerText = isPaper ? 'Paper Mode' : 'Live Mode';
+      document.getElementById('active-env-indicator').className = isPaper ? 'text-emerald-400' : 'text-amber-400';
+
+      const resetBtn = document.getElementById('btn-paper-reset');
+      if (isPaper) {
+        resetBtn.classList.remove('hidden');
+      } else {
+        resetBtn.classList.add('hidden');
+      }
+
+      await loadDashboardData();
+    }
+
+    // Tab Navigation
+    function switchMainTab(tabName) {
+      const tabs = ['chart', 'orders', 'council', 'options', 'scanner'];
+      tabs.forEach(t => {
+        const viewEl = document.getElementById(`view-tab-${t}`);
+        const btnEl = document.getElementById(`tab-btn-${t}`);
+        if (t === tabName) {
+          viewEl.classList.remove('hidden');
+          btnEl.classList.add('active', 'bg-rhGreen', 'text-black', 'font-bold');
+          btnEl.classList.remove('text-gray-300');
+        } else {
+          viewEl.classList.add('hidden');
+          btnEl.classList.remove('active', 'bg-rhGreen', 'text-black', 'font-bold');
+          btnEl.classList.add('text-gray-300');
+        }
+      });
+
+      if (tabName === 'chart' && chartInstance) {
+        chartInstance.resize(document.getElementById('tv-chart-container').clientWidth, 320);
+      } else if (tabName === 'orders') {
+        loadOrdersHistory();
+      } else if (tabName === 'council') {
+        loadCouncilHistory();
+      } else if (tabName === 'options') {
+        loadOptionsRecommendations();
+      } else if (tabName === 'scanner') {
+        loadMarketScans();
+      }
+    }
+
+    // Universal Symbol Search
+    function handleSearchInput(val) {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(async () => {
+        const query = val.trim();
+        const dropdown = document.getElementById('search-dropdown');
+        if (!query) {
+          dropdown.classList.add('hidden');
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+          const results = await res.json();
+          if (!results.length) {
+            dropdown.innerHTML = `<div class="p-3 text-gray-500 text-center text-xs">No tickers found for "${query}"</div>`;
+          } else {
+            dropdown.innerHTML = results.map(r => `
+              <div onclick="selectSymbol('${r.symbol}')" class="p-3 hover:bg-rhDark cursor-pointer flex items-center justify-between transition">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white font-mono">${r.symbol}</span>
+                    <span class="text-gray-400 text-[11px] truncate max-w-xs">${r.name}</span>
+                  </div>
+                  <span class="text-[10px] text-gray-500">${r.sector || 'Equity'}</span>
+                </div>
+                <div class="text-right font-mono">
+                  <div class="text-white font-semibold">$${r.price ? r.price.toFixed(2) : '—'}</div>
+                </div>
+              </div>
+            `).join('');
+          }
+          dropdown.classList.remove('hidden');
+        } catch (e) {
+          console.error("Search error", e);
+        }
+      }, 150);
+    }
+
+    function handleSearchFocus() {
+      const input = document.getElementById('global-search-input');
+      if (input.value.trim()) {
+        handleSearchInput(input.value);
+      }
+    }
+
+    // Close search on click outside
+    document.addEventListener('click', (e) => {
+      const searchBox = document.getElementById('global-search-input');
+      const dropdown = document.getElementById('search-dropdown');
+      if (searchBox && dropdown && !searchBox.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // Keyboard shortcut '/'
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        document.getElementById('global-search-input').focus();
+      }
+    });
+
+    // Select Active Symbol
+    async function selectSymbol(sym) {
+      activeSymbol = sym.toUpperCase();
+      document.getElementById('global-search-input').value = '';
+      document.getElementById('search-dropdown').classList.add('hidden');
+
+      // Update badge and headers
+      document.getElementById('active-symbol-badge').innerText = activeSymbol;
+      document.getElementById('active-symbol-indicator').innerText = activeSymbol;
+      document.getElementById('order-symbol-display').innerText = activeSymbol;
+      document.getElementById('options-active-sym').innerText = activeSymbol;
+
+      // Load Quote & Chart
+      try {
+        const quoteRes = await fetch(`/api/quote/${activeSymbol}`);
+        const quote = await quoteRes.json();
+        currentQuotePrice = Number(quote.last_trade_price) || 0.0;
+
+        document.getElementById('active-company-name').innerText = quote.name || `${activeSymbol} Corporation`;
+        document.getElementById('chart-price-display').innerText = `$${currentQuotePrice.toFixed(2)}`;
+        document.getElementById('order-price-display').innerText = `$${currentQuotePrice.toFixed(2)}`;
+
+        const prev = quote.previous_close || currentQuotePrice;
+        const diff = currentQuotePrice - prev;
+        const diffPct = (diff / prev) * 100;
+        const chgEl = document.getElementById('chart-change-display');
+        chgEl.innerText = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${diff >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`;
+        chgEl.className = diff >= 0 ? 'text-xs font-semibold text-rhGreen font-mono' : 'text-xs font-semibold text-rhRed font-mono';
+
+        updateOrderEstimate();
+        loadChartData(activeSymbol, activeTimeframe);
+      } catch (e) {
+        console.error("Quote fetch error", e);
+      }
+    }
+
+    // Chart Timeframe Selection
+    function setChartTimeframe(tf) {
+      activeTimeframe = tf;
+      ['1D', '1W', '1M', '1Y'].forEach(t => {
+        const btn = document.getElementById(`tf-${t}`);
+        if (t === tf) {
+          btn.className = "px-3 py-1 rounded-lg bg-rhBorder text-white font-bold cursor-pointer";
+        } else {
+          btn.className = "px-3 py-1 rounded-lg text-gray-400 hover:text-white cursor-pointer";
+        }
+      });
+      loadChartData(activeSymbol, tf);
+    }
+
+    // TradingView Lightweight Chart Init
+    function initTradingViewChart() {
+      const container = document.getElementById('tv-chart-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      chartInstance = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: 320,
+        layout: {
+          background: { color: '#0b0e11' },
+          textColor: '#9ca3af',
+        },
+        grid: {
+          vertLines: { color: '#181e26' },
+          horzLines: { color: '#181e26' },
+        },
+        crosshair: {
+          mode: LightweightCharts.CrosshairMode.Normal,
+        },
+        rightPriceScale: {
+          borderColor: '#232a34',
+        },
+        timeScale: {
+          borderColor: '#232a34',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      });
+
+      candleSeries = chartInstance.addCandlestickSeries({
+        upColor: '#00c805',
+        downColor: '#ff5000',
+        borderDownColor: '#ff5000',
+        borderUpColor: '#00c805',
+        wickDownColor: '#ff5000',
+        wickUpColor: '#00c805',
+      });
+
+      volumeSeries = chartInstance.addHistogramSeries({
+        color: '#26a69a',
+        priceFormat: { type: 'volume' },
+        priceScaleId: '',
+      });
+
+      volumeSeries.priceScale().applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+      });
+
+      window.addEventListener('resize', () => {
+        if (chartInstance && container) {
+          chartInstance.resize(container.clientWidth, 320);
+        }
+      });
+
+      loadChartData(activeSymbol, activeTimeframe);
+    }
+
+    async function loadChartData(sym, tf) {
+      if (!candleSeries) return;
+      try {
+        const [histRes, tradesRes] = await Promise.all([
+          fetch(`/api/historicals/${sym}?timeframe=${tf}`),
+          fetch(`/api/trades?mode=${activeEnvironment}&limit=30`)
+        ]);
+        if (!histRes.ok) return;
+        const bars = await histRes.json();
+        const trades = await tradesRes.json();
+
+        candleSeries.setData(bars.map(b => ({
+          time: b.time,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+        })));
+
+        volumeSeries.setData(bars.map(b => ({
+          time: b.time,
+          value: b.volume,
+          color: b.close >= b.open ? 'rgba(0, 200, 5, 0.3)' : 'rgba(255, 80, 0, 0.3)',
+        })));
+
+        // Trade markers on chart
+        const symTrades = trades.filter(t => t.symbol === sym);
+        const markers = [];
+        if (symTrades.length > 0 && bars.length > 0) {
+          const lastBarTime = bars[bars.length - 1].time;
+          symTrades.forEach((st, idx) => {
+            const isBuy = st.side === 'buy';
+            markers.push({
+              time: lastBarTime - (idx * 300),
+              position: isBuy ? 'belowBar' : 'aboveBar',
+              color: isBuy ? '#00c805' : '#ff5000',
+              shape: isBuy ? 'arrowUp' : 'arrowDown',
+              text: `${isBuy ? 'BUY' : 'SELL'} $${st.amount_usd || ''}`,
+            });
+          });
+        }
+        candleSeries.setMarkers(markers);
+      } catch (e) {
+        console.error("Chart load error", e);
+      }
+    }
+
+    // Order Desk Handlers
+    function setOrderSide(side) {
+      activeOrderSide = side;
+      const btnBuy = document.getElementById('btn-side-buy');
+      const btnSell = document.getElementById('btn-side-sell');
+      const submitText = document.getElementById('submit-order-text');
+      const submitBtn = document.getElementById('btn-submit-order');
+
+      if (side === 'buy') {
+        btnBuy.className = "py-2 rounded-lg font-bold bg-rhGreen text-black transition cursor-pointer";
+        btnSell.className = "py-2 rounded-lg font-bold text-gray-400 hover:text-white transition cursor-pointer";
+        submitBtn.className = "w-full py-3 rounded-xl font-extrabold text-xs bg-rhGreen text-black hover:bg-rhGreenHover transition shadow-lg shadow-rhGreen/10 flex items-center justify-center gap-2 cursor-pointer";
+      } else {
+        btnSell.className = "py-2 rounded-lg font-bold bg-rhRed text-white transition cursor-pointer";
+        btnBuy.className = "py-2 rounded-lg font-bold text-gray-400 hover:text-white transition cursor-pointer";
+        submitBtn.className = "w-full py-3 rounded-xl font-extrabold text-xs bg-rhRed text-white hover:bg-rhRedHover transition shadow-lg shadow-rhRed/10 flex items-center justify-center gap-2 cursor-pointer";
+      }
+      if (activeEnvironment === 'paper') {
+        submitText.innerText = `Execute Paper ${side.toUpperCase()} Order`;
+      } else if (latestMarketStatus && !latestMarketStatus.is_open) {
+        submitText.innerText = `Market Closed (Opens ${latestMarketStatus.next_open_et.split(' at ')[0]})`;
+      } else {
+        submitText.innerText = `Execute Live ${side.toUpperCase()} Order`;
+      }
+      updateOrderEstimate();
+    }
+
+    function updateOrderEstimate() {
+      const input = document.getElementById('order-amount-input');
+      const val = parseFloat(input.value || "0");
+      const estShares = currentQuotePrice > 0 ? (val / currentQuotePrice).toFixed(4) : "0.0000";
+      document.getElementById('order-est-shares').innerText = `${estShares} shares`;
+    }
+
+    async function submitOrderDeskTrade() {
+      const amount = parseFloat(document.getElementById('order-amount-input').value || "0");
+      if (amount <= 0) {
+        alert("Please enter a valid dollar amount.");
+        return;
+      }
+
+      const btn = document.getElementById('btn-submit-order');
+      const btnText = document.getElementById('submit-order-text');
+      btn.disabled = true;
+      btnText.innerText = "Executing...";
+
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: activeSymbol,
+            side: activeOrderSide,
+            amount_usd: amount,
+            order_type: "market",
+            mode: activeEnvironment,
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          btnText.innerText = "Filled!";
+          setTimeout(() => {
+            btn.disabled = false;
+            setOrderSide(activeOrderSide);
+          }, 800);
+          await loadDashboardData();
+        } else {
+          const err = await res.json();
+          alert("Order Error: " + (err.detail || "Unable to place order"));
+          btn.disabled = false;
+          setOrderSide(activeOrderSide);
+        }
+      } catch (e) {
+        alert("Network error executing order: " + e);
+        btn.disabled = false;
+        setOrderSide(activeOrderSide);
+      }
+    }
+
+    // Reset Paper Wallet
+    async function resetPaperWallet() {
+      if (!confirm("Are you sure you want to reset your virtual paper account back to $100,000.00 cash?")) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/paper/reset', { method: 'POST' });
+        if (res.ok) {
+          alert("Paper trading account reset to $100,000.00 cash.");
+          await loadDashboardData();
+        }
+      } catch (e) {
+        alert("Error resetting paper account: " + e);
+      }
+    }
+
+    async function switchToAgenticAccount() {
+      const agenticAcc = userAccounts.find(a => a.agentic_allowed);
+      if (agenticAcc) {
+        document.getElementById('live-account-select').value = agenticAcc.account_number;
+        await onLiveAccountChange(agenticAcc.account_number);
+      }
+    }
+
+    // Load Dashboard State
+    async function loadDashboardData() {
+      try {
+        const urlParams = activeEnvironment === 'live' 
+          ? `mode=live&account=${selectedAccount}` 
+          : 'mode=paper';
+
+        const [portfolioRes, positionsRes, safetyRes, engineStatusRes, marketStatusRes] = await Promise.all([
+          fetch(`/api/portfolio?${urlParams}`),
+          fetch(`/api/positions?${urlParams}`),
+          fetch('/api/safety'),
+          fetch('/api/engine/status'),
+          fetch('/api/market/status')
+        ]);
+
+        if (portfolioRes.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+
+        const portfolio = await portfolioRes.json();
+        const positions = await positionsRes.json();
+        const safety = await safetyRes.json();
+        const engineStatus = await engineStatusRes.json();
+        const marketStatus = await marketStatusRes.json();
+        latestMarketStatus = marketStatus;
+
+        // Render Market Hours Status Badge in Header
+        const marketBadge = document.getElementById('market-status-badge');
+        const marketDot = document.getElementById('market-status-dot');
+        const marketText = document.getElementById('market-status-text');
+        if (marketBadge && marketStatus) {
+          if (marketStatus.is_open) {
+            marketBadge.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-rhGreen/40 bg-rhGreen/10 text-rhGreen";
+            marketDot.className = "w-2 h-2 rounded-full bg-rhGreen animate-pulse";
+            marketText.innerText = "🟢 Market Open (RTH)";
+            marketBadge.title = `US Stock Market Open (9:30 AM - 4:00 PM ET) | ${marketStatus.current_time_et}`;
+          } else {
+            marketBadge.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border border-red-500/30 bg-red-500/10 text-red-400";
+            marketDot.className = "w-2 h-2 rounded-full bg-rhRed";
+            marketText.innerText = "🔴 Market Closed";
+            marketBadge.title = `${marketStatus.status_text} | Opens ${marketStatus.next_open_et} (${marketStatus.current_time_et})`;
+          }
+        }
+
+        // Dynamically update Engine Button in Header
+        const engineBtn = document.getElementById('btn-engine-toggle');
+        if (engineBtn && engineStatus) {
+          if (engineStatus.is_running) {
+            engineBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-rhGreen/20 text-rhGreen border border-rhGreen/40 hover:bg-rhGreen/30 transition flex items-center gap-1.5 cursor-pointer";
+            engineBtn.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-rhGreen animate-pulse"></span>
+              <span id="engine-status-text">Engine Active</span>
+            `;
+          } else {
+            engineBtn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-800 text-gray-400 border border-rhBorder hover:bg-gray-700 transition flex items-center gap-1.5 cursor-pointer";
+            engineBtn.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-gray-500"></span>
+              <span id="engine-status-text">Engine Paused</span>
+            `;
+          }
+        }
+
+        // Sync Strategy Selectors
+        if (engineStatus && engineStatus.active_strategy) {
+          const globalSelect = document.getElementById('global-strategy-select');
+          const modalSelect = document.getElementById('setting-active-strategy');
+          if (globalSelect && globalSelect.value !== engineStatus.active_strategy) {
+            globalSelect.value = engineStatus.active_strategy;
+          }
+          if (modalSelect && modalSelect.value !== engineStatus.active_strategy) {
+            modalSelect.value = engineStatus.active_strategy;
+          }
+        }
+
+        // Handle Unfunded / Ring-fence Banner / Market Hours when in Live mode
+        const unfundedBanner = document.getElementById('unfunded-live-banner');
+        const unfundedOrderWarn = document.getElementById('order-unfunded-warning');
+        const marketClosedWarn = document.getElementById('order-market-closed-warning');
+        const submitBtn = document.getElementById('btn-submit-order');
+        const submitText = document.getElementById('submit-order-text');
+
+        if (activeEnvironment === 'live') {
+          const currentAcc = userAccounts.find(a => a.account_number === selectedAccount);
+          const isAgenticAllowed = currentAcc ? currentAcc.agentic_allowed : false;
+
+          if (!marketStatus.is_open) {
+            marketClosedWarn.classList.remove('hidden');
+            const nextOpenEl = document.getElementById('market-closed-next-open');
+            if (nextOpenEl) nextOpenEl.innerText = marketStatus.next_open_et;
+            submitBtn.disabled = true;
+            submitBtn.className = "w-full py-3 rounded-xl font-bold text-xs bg-gray-800 text-gray-500 cursor-not-allowed border border-rhBorder flex items-center justify-center";
+            submitText.innerText = `Market Closed (Opens ${marketStatus.next_open_et.split(' at ')[0]})`;
+            unfundedBanner.classList.add('hidden');
+            unfundedOrderWarn.classList.add('hidden');
+          } else if (!isAgenticAllowed) {
+            marketClosedWarn.classList.add('hidden');
+            unfundedBanner.innerHTML = `
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>Viewing <strong>${currentAcc ? currentAcc.nickname : 'Margin Account'}</strong> (${currentAcc ? currentAcc.display_account : ''}). Live balances and holdings synced. Note: Robinhood ring-fences personal accounts; automated AI trades execute on your <strong>Agentic Account</strong>.</span>
+              </div>
+              <button onclick="switchToAgenticAccount()" class="px-3 py-1 bg-amber-400 text-black hover:bg-amber-300 rounded-lg text-xs font-bold transition shadow cursor-pointer">
+                Switch to Agentic Account
+              </button>
+            `;
+            unfundedBanner.classList.remove('hidden');
+            unfundedOrderWarn.innerHTML = `⚠️ <strong>Personal Account Protected</strong>: Robinhood restricts direct API orders on personal accounts. To place live orders, switch to your Agentic Account (${currentAcc ? currentAcc.display_account : ''}) or use Paper Trading.`;
+            unfundedOrderWarn.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.className = "w-full py-3 rounded-xl font-bold text-xs bg-gray-800 text-gray-500 cursor-not-allowed border border-rhBorder flex items-center justify-center";
+            submitText.innerText = `Execute Live ${activeOrderSide.toUpperCase()} Order`;
+          } else if (portfolio.buying_power <= 0) {
+            marketClosedWarn.classList.add('hidden');
+            unfundedBanner.innerHTML = `
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span><strong>Robinhood Agentic Account (${portfolio.account_number ? '••••' + portfolio.account_number.slice(-4) : '••••0000'})</strong> is ready for AI orders but has $0.00 Buying Power. Transfer funds from your Margin account in the Robinhood app to trade live.</span>
+              </div>
+              <button onclick="setEnvironment('paper')" class="px-3 py-1 bg-amber-400 text-black hover:bg-amber-300 rounded-lg text-xs font-bold transition shadow cursor-pointer">
+                Switch to Paper ($100k)
+              </button>
+            `;
+            unfundedBanner.classList.remove('hidden');
+            unfundedOrderWarn.innerHTML = `⚠️ <strong>Account Unfunded</strong>: Your live Robinhood Agentic balance is $0.00. Please deposit funds into Robinhood or switch to Paper Trading to practice with $100,000.00 virtual cash.`;
+            unfundedOrderWarn.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.className = "w-full py-3 rounded-xl font-bold text-xs bg-gray-800 text-gray-500 cursor-not-allowed border border-rhBorder flex items-center justify-center";
+            submitText.innerText = `Execute Live ${activeOrderSide.toUpperCase()} Order`;
+          } else {
+            marketClosedWarn.classList.add('hidden');
+            unfundedBanner.classList.add('hidden');
+            unfundedOrderWarn.classList.add('hidden');
+            submitBtn.disabled = false;
+            submitBtn.className = "w-full py-3 rounded-xl font-extrabold text-xs bg-amber-400 text-black hover:bg-amber-300 transition shadow-lg shadow-amber-400/10 flex items-center justify-center gap-2 cursor-pointer";
+            submitText.innerText = `Execute Live ${activeOrderSide.toUpperCase()} Order`;
+          }
+        } else {
+          marketClosedWarn.classList.add('hidden');
+          unfundedBanner.classList.add('hidden');
+          unfundedOrderWarn.classList.add('hidden');
+          submitBtn.disabled = false;
+          submitBtn.className = "w-full py-3 rounded-xl font-extrabold text-xs bg-rhGreen text-black hover:bg-rhGreenHover transition shadow-lg shadow-rhGreen/10 flex items-center justify-center gap-2 cursor-pointer";
+          submitText.innerText = `Execute Paper ${activeOrderSide.toUpperCase()} Order`;
+        }
+
+        // Render Portfolio Metrics
+        document.getElementById('stat-equity').innerText = `$${portfolio.total_equity.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        document.getElementById('stat-bp').innerText = `$${portfolio.buying_power.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+        
+        const pnlEl = document.getElementById('stat-pnl');
+        const sign = portfolio.day_return_usd >= 0 ? '+' : '-';
+        const color = portfolio.day_return_usd >= 0 ? 'text-rhGreen' : 'text-rhRed';
+        pnlEl.className = `text-xs font-medium mt-0.5 font-mono ${color}`;
+        pnlEl.innerText = `${sign}$${Math.abs(portfolio.day_return_usd).toFixed(2)} (${sign}${Math.abs(portfolio.day_return_percent).toFixed(2)}%)`;
+
+        // Render Positions Count
+        document.getElementById('stat-pos-count').innerText = positions.length;
+        document.getElementById('positions-count-badge').innerText = `${positions.length} Position${positions.length === 1 ? '' : 's'}`;
+
+        // Render Positions Table
+        const tbody = document.getElementById('holdings-tbody');
+        if (!positions.length) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="7" class="py-6 text-center text-gray-500 font-sans">
+                No open positions in ${activeEnvironment === 'paper' ? 'paper simulation' : 'live account'}.
+              </td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = positions.map(pos => {
+            const pnlColor = pos.unrealized_pnl_usd >= 0 ? 'text-rhGreen' : 'text-rhRed';
+            const pnlSign = pos.unrealized_pnl_usd >= 0 ? '+' : '';
+            return `
+              <tr class="hover:bg-rhDark/60 transition cursor-pointer" onclick="selectSymbol('${pos.symbol}')">
+                <td class="py-2.5 font-bold text-white">${pos.symbol}</td>
+                <td>${pos.quantity}</td>
+                <td>$${pos.average_buy_price.toFixed(2)}</td>
+                <td>$${pos.current_price.toFixed(2)}</td>
+                <td class="font-medium">$${pos.market_value.toFixed(2)}</td>
+                <td class="text-right font-medium ${pnlColor}">${pnlSign}$${pos.unrealized_pnl_usd.toFixed(2)} (${pnlSign}${pos.unrealized_pnl_percent.toFixed(2)}%)</td>
+                <td class="text-right">
+                  <button onclick="event.stopPropagation(); quickSell('${pos.symbol}', ${pos.market_value})" class="px-2.5 py-1 text-[10px] rounded bg-rhRed/20 text-rhRed hover:bg-rhRed/30 transition">
+                    Sell
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        // Initialize / Refresh chart
+        if (!chartInstance) {
+          initTradingViewChart();
+        } else {
+          loadChartData(activeSymbol, activeTimeframe);
+        }
+
+      } catch (e) {
+        console.error("Dashboard data load error", e);
+      }
+    }
+
+    async function quickSell(sym, amountUsd) {
+      selectSymbol(sym);
+      setOrderSide('sell');
+      document.getElementById('order-amount-input').value = amountUsd.toFixed(2);
+      updateOrderEstimate();
+    }
+
+    // Orders History View
+    async function loadOrdersHistory() {
+      try {
+        const res = await fetch(`/api/trades?mode=${activeEnvironment}&limit=50`);
+        const trades = await res.json();
+        const list = document.getElementById('orders-history-list');
+        if (!trades.length) {
+          list.innerHTML = `<div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder text-gray-500 text-center">No orders executed in ${activeEnvironment} mode yet.</div>`;
+          return;
+        }
+
+        list.innerHTML = trades.map(t => {
+          const isBuy = t.side === 'buy';
+          return `
+            <div class="p-3 rounded-xl bg-rhDark/60 border border-rhBorder flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="px-2 py-0.5 rounded font-bold text-xs ${isBuy ? 'bg-rhGreen/20 text-rhGreen' : 'bg-rhRed/20 text-rhRed'} font-mono uppercase">
+                  ${t.side}
+                </span>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white font-mono">${t.symbol}</span>
+                    <span class="text-gray-400 font-mono">$${t.amount_usd ? t.amount_usd.toFixed(2) : ''}</span>
+                  </div>
+                  <p class="text-[11px] text-gray-500 mt-0.5">${t.rationale || 'Order Desk fill'}</p>
+                </div>
+              </div>
+              <div class="text-right text-[11px] text-gray-400 font-mono">
+                <span class="px-1.5 py-0.5 rounded bg-rhDark border border-rhBorder text-emerald-400">${t.status || 'filled'}</span>
+                <div class="mt-1 text-gray-500">${new Date(t.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        console.error("Orders load error", e);
+      }
+    }
+
+    // Deliberation Council View
+    async function loadCouncilHistory() {
+      try {
+        const res = await fetch('/api/council/history');
+        const debates = await res.json();
+        const list = document.getElementById('council-stream-list');
+        if (!debates.length) {
+          list.innerHTML = `<div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder text-gray-400 text-xs">No council deliberations recorded yet. Click "Deliberate Market Now" to convene the committee.</div>`;
+          return;
+        }
+
+        list.innerHTML = debates.map(d => {
+          const isApproved = d.verdict === "APPROVED";
+          const score = d.consensus_score || 70;
+          return `
+            <div class="p-4 rounded-xl bg-rhDark/60 border ${isApproved ? 'border-rhGreen/30' : 'border-amber-500/30'} space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded font-bold text-xs ${d.side === 'buy' ? 'bg-rhGreen/20 text-rhGreen' : 'bg-red-500/20 text-red-400'} font-mono">
+                    ${d.side ? d.side.toUpperCase() : 'TRADE'} ${d.symbol}
+                  </span>
+                  <span class="text-xs text-gray-300 font-mono">$${(d.amount_usd || 50).toFixed(2)} @ $${(d.current_price || 0).toFixed(2)}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-mono font-bold ${score >= 70 ? 'text-rhGreen' : 'text-amber-400'}">
+                    Conviction: ${score}%
+                  </span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isApproved ? 'bg-rhGreen text-black' : 'bg-amber-500 text-black'}">
+                    ${d.verdict}
+                  </span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div class="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/20">
+                  <div class="text-[10px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1">
+                    <span>🐂 Bull Analyst</span>
+                    <span class="ml-auto font-mono">${d.bull_confidence || 80}%</span>
+                  </div>
+                  <p class="text-gray-300 mt-1 leading-relaxed">${d.bull_argument || 'Favorable upside momentum.'}</p>
+                </div>
+
+                <div class="p-2.5 rounded-lg bg-rose-950/20 border border-rose-500/20">
+                  <div class="text-[10px] font-bold text-rose-400 uppercase tracking-wide flex items-center gap-1">
+                    <span>🐻 Bear Skeptic</span>
+                    <span class="ml-auto font-mono">Risk ${d.bear_risk_score || 35}%</span>
+                  </div>
+                  <p class="text-gray-300 mt-1 leading-relaxed">${d.bear_argument || 'Overhead resistance monitored.'}</p>
+                </div>
+              </div>
+
+              <div class="p-2.5 rounded-lg bg-blue-950/20 border border-blue-500/20 text-xs">
+                <div class="text-[10px] font-bold text-blue-400 uppercase tracking-wide">
+                  ⚖️ Risk Officer & Portfolio Manager Judgment
+                </div>
+                <p class="text-gray-300 mt-1 leading-relaxed">${d.risk_officer_judgment || 'Within position bounds.'}</p>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        console.error("Council load error", e);
+      }
+    }
+
+    // Options View
+    async function loadOptionsRecommendations() {
+      try {
+        const res = await fetch('/api/options/recommendations');
+        const recs = await res.json();
+        const list = document.getElementById('options-recommendations-list');
+        if (!recs.length) {
+          list.innerHTML = `<div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder text-gray-500 text-center">No options setups found.</div>`;
+          return;
+        }
+
+        list.innerHTML = recs.map(r => `
+          <div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder hover:border-gray-600 transition flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-bold text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                  ${r.strategy_type}
+                </span>
+                <span class="font-bold text-white text-sm">${r.symbol} $${r.strike_price.toFixed(2)} ${r.contract_type.toUpperCase()}</span>
+                <span class="text-xs text-gray-400 font-mono">${r.dte} DTE (${r.expiration})</span>
+              </div>
+              <p class="text-xs text-gray-300">${r.rationale}</p>
+              <div class="flex items-center gap-4 text-[11px] text-gray-400 font-mono pt-1">
+                <span>Delta: <strong class="text-white">${r.delta}</strong></span>
+                <span>Theta: <strong class="text-white">${r.theta}/day</strong></span>
+                <span>Premium: <strong class="text-rhGreen">+$${r.premium_usd.toFixed(2)}</strong></span>
+                <span>Yield: <strong class="text-rhGreen">${r.annualized_yield_pct}%</strong></span>
+              </div>
+            </div>
+
+            <button onclick="executeOptionOrder('${r.symbol}', '${r.action}', '${r.contract_type}', ${r.strike_price}, '${r.expiration}', ${r.premium_usd})" class="px-4 py-2 rounded-xl text-xs font-bold bg-rhGreen text-black hover:bg-rhGreenHover transition whitespace-nowrap shadow-md cursor-pointer">
+              Execute Strategy
+            </button>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error("Options error", e);
+      }
+    }
+
+    async function executeOptionOrder(symbol, action, contract_type, strike_price, expiration, premium_usd) {
+      if (!confirm(`Execute option trade: ${action.toUpperCase()} 1x ${symbol} $${strike_price} ${contract_type.toUpperCase()} for +$${premium_usd.toFixed(2)} premium?`)) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/options/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, action, contract_type, strike_price, expiration, contracts: 1, premium_usd })
+        });
+        const data = await res.json();
+        alert(`Option trade recorded: ${data.receipt.order_id}`);
+        loadDashboardData();
+      } catch (e) {
+        alert("Option execution error: " + e);
+      }
+    }
+
+    // Market Scanner View
+    async function loadMarketScans() {
+      try {
+        const res = await fetch('/api/market/scanner');
+        const scans = await res.json();
+        const grid = document.getElementById('scanner-grid');
+        if (!scans.length) {
+          grid.innerHTML = `<div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder text-gray-500 text-center col-span-2">No active setups.</div>`;
+          return;
+        }
+
+        grid.innerHTML = scans.map(s => `
+          <div class="p-4 rounded-xl bg-rhDark/60 border border-rhBorder hover:border-gray-500 transition flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-2 border-b border-rhBorder/60">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-white text-base">${s.symbol}</span>
+                  <span class="text-xs text-gray-300 font-mono">$${s.price.toFixed(2)}</span>
+                  <span class="text-xs font-semibold ${s.change_percent >= 0 ? 'text-rhGreen' : 'text-rhRed'} font-mono">
+                    ${s.change_percent >= 0 ? '+' : ''}${s.change_percent}%
+                  </span>
+                </div>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rhGreen/20 text-rhGreen border border-rhGreen/30">
+                  ${s.setup_badge}
+                </span>
+              </div>
+              <p class="text-xs text-gray-300 mt-2.5 leading-relaxed">${s.rationale}</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-rhBorder/60 flex items-center justify-between">
+              <button onclick="selectSymbol('${s.symbol}')" class="text-xs text-rhGreen hover:underline cursor-pointer">
+                Select Asset &rarr;
+              </button>
+              <button onclick="selectSymbol('${s.symbol}'); switchMainTab('council')" class="px-3 py-1 bg-rhBorder hover:bg-gray-700 rounded-lg text-xs font-semibold text-white transition cursor-pointer">
+                Deliberate 🏛️
+              </button>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error("Scanner error", e);
+      }
+    }
+
+    // Engine & Scan Triggers
+    async function toggleEngine() {
+      const res = await fetch('/api/engine/status');
+      const status = await res.json();
+      const endpoint = status.is_running ? '/api/engine/stop' : '/api/engine/start';
+      await fetch(endpoint, { method: 'POST' });
+      await loadDashboardData();
+    }
+
+    async function triggerScan() {
+      await fetch('/api/engine/scan', { method: 'POST' });
+      switchMainTab('council');
+    }
+
+    async function onStrategyChange(newStrategyId) {
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active_strategy: newStrategyId })
+        });
+        if (res.ok) {
+          const globalSelect = document.getElementById('global-strategy-select');
+          const modalSelect = document.getElementById('setting-active-strategy');
+          if (globalSelect) globalSelect.value = newStrategyId;
+          if (modalSelect) modalSelect.value = newStrategyId;
+          await loadDashboardData();
+        }
+      } catch (e) {
+        console.error("Failed to switch strategy:", e);
+      }
+    }
+
+    async function loadStrategies() {
+      try {
+        const res = await fetch('/api/strategies');
+        if (!res.ok) return;
+        const data = await res.json();
+        const strats = data.strategies || [];
+        const activeId = data.active_strategy;
+
+        const optionsHtml = strats.map(s => {
+          const riskEmoji = s.risk_level === 'Low' ? '🟢' : s.risk_level === 'Moderate' ? '🟡' : s.risk_level === 'High' ? '🔴' : s.risk_level === 'Very High' ? '📈' : '🔥';
+          return `<option value="${s.id}" ${s.id === activeId ? 'selected' : ''}>
+            ${riskEmoji} ${s.name} [${s.risk_level}]
+          </option>`;
+        }).join('');
+
+        const globalSelect = document.getElementById('global-strategy-select');
+        if (globalSelect && optionsHtml) {
+          globalSelect.innerHTML = optionsHtml;
+          globalSelect.value = activeId;
+        }
+
+        const modalSelect = document.getElementById('setting-active-strategy');
+        if (modalSelect && optionsHtml) {
+          modalSelect.innerHTML = optionsHtml;
+          modalSelect.value = activeId;
+        }
+      } catch (e) {
+        console.error("Failed to load strategies:", e);
+      }
+    }
+
+    // Chat Logic
+    async function handleChatSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('chat-input');
+      const msg = input.value.trim();
+      if (!msg) return;
+      input.value = '';
+      appendChatMessage('User', msg, true);
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg })
+      });
+      const data = await res.json();
+      appendChatMessage('AI', data.reply, false);
+    }
+
+    function sendQuickPrompt(promptText) {
+      document.getElementById('chat-input').value = promptText;
+      handleChatSubmit(new Event('submit'));
+    }
+
+    function appendChatMessage(sender, text, isUser) {
+      const container = document.getElementById('chat-messages');
+      const bubble = document.createElement('div');
+      bubble.className = "flex gap-2.5";
+      const formattedText = text.replace(/\n/g, '<br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+      bubble.innerHTML = isUser ? `
+        <div class="ml-auto bg-rhGreen/15 border border-rhGreen/30 text-white p-2.5 rounded-xl max-w-[85%] leading-relaxed">
+          ${formattedText}
+        </div>
+      ` : `
+        <div class="w-6 h-6 rounded bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-[10px] shrink-0">
+          AI
+        </div>
+        <div class="bg-rhDark/70 border border-rhBorder p-2.5 rounded-xl text-gray-300 max-w-[85%] leading-relaxed">
+          ${formattedText}
+        </div>
+      `;
+      container.appendChild(bubble);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Settings Modal
+    function openSettingsModal() {
+      document.getElementById('settings-modal').classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    async function saveSettingsForm() {
+      const envVal = document.getElementById('setting-env-select').value;
+      const dry_run = envVal === 'paper';
+      const execution_mode = document.getElementById('setting-execution-mode').value;
+      const max_order_usd = parseFloat(document.getElementById('setting-max-order').value || "100");
+      const daily_trade_limit_usd = parseFloat(document.getElementById('setting-daily-limit').value || "500");
+      const asset_whitelist = document.getElementById('setting-whitelist').value.trim();
+      const active_strategy = document.getElementById('setting-active-strategy').value;
+
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run, execution_mode, max_order_usd, daily_trade_limit_usd, asset_whitelist, active_strategy })
+      });
+
+      closeSettingsModal();
+      setEnvironment(envVal);
+    }
+
+    async function resetCircuitBreaker() {
+      await fetch('/api/safety/reset-circuit-breaker', { method: 'POST' });
+      document.getElementById('circuit-breaker-banner').classList.add('hidden');
+      loadDashboardData();
+    }
+
+    async function handleLogout() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } finally {
+        window.location.href = '/login';
+      }
+    }
+
+    // Initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDashboardData();
+      loadStrategies();
+      selectSymbol('SPY');
+
+      // SSE connection
+      const sse = new EventSource('/api/events');
+      sse.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === 'trade_executed' || payload.type === 'paper_reset') {
+            loadDashboardData();
+          } else if (payload.type === 'council_deliberation') {
+            loadCouncilHistory();
+          } else if (payload.type === 'circuit_breaker_tripped') {
+            document.getElementById('circuit-breaker-banner').classList.remove('hidden');
+          }
+        } catch (e) {}
+      };
+    });
+  </script>
+</body>
+</html>

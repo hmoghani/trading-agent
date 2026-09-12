@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: robinhood-agent-config
+  namespace: robinhood
+  labels:
+    app: robinhood-agent
+data:
+  EXECUTION_MODE: "autonomous"
+  DRY_RUN: "true"
+  MAX_ORDER_USD: "100.0"
+  DAILY_TRADE_LIMIT_USD: "500.0"
+  ASSET_WHITELIST: "SPY,QQQ,AAPL,NVDA,TSLA"
+  STRATEGY_INTERVAL_SECONDS: "300"
+  ROBINHOOD_MCP_URL: "https://agent.robinhood.com/mcp/trading"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  SESSION_EXPIRE_HOURS: "168"
+  # Optional: Comma-separated list of allowed Robinhood user emails. Leave empty to allow any Robinhood account.
+  AUTHORIZED_EMAILS: ""
