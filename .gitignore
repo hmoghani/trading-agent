@@ -32,6 +32,10 @@ env/
 *.pickle
 .robinhood_token*
 .mcp-auth/
+k8s/local/
+k8s/*.local.yaml
+k8s/secret.yaml
+*.local.sh
 
 # Testing & Coverage
 .pytest_cache/
