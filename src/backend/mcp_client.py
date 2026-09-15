@@ -167,15 +167,21 @@ class RobinhoodMCPBridge:
         if self._agentic_account_number:
             return self._agentic_account_number
 
-        resp = await self.call_tool("get_accounts", {})
-        if resp and "data" in resp and "accounts" in resp["data"]:
-            for acc in resp["data"]["accounts"]:
-                if acc.get("agentic_allowed") is True:
-                    self._agentic_account_number = acc.get("account_number")
-                    return self._agentic_account_number
-            first = resp["data"]["accounts"][0].get("account_number")
-            self._agentic_account_number = first
-            return first
+        if not self.is_authenticated():
+            return "222222222"
+
+        try:
+            resp = await self.call_tool("get_accounts", {})
+            if resp and "data" in resp and "accounts" in resp["data"]:
+                for acc in resp["data"]["accounts"]:
+                    if acc.get("agentic_allowed") is True:
+                        self._agentic_account_number = acc.get("account_number")
+                        return self._agentic_account_number
+                first = resp["data"]["accounts"][0].get("account_number")
+                self._agentic_account_number = first
+                return first
+        except Exception:
+            pass
         return "222222222"
 
     async def get_accounts(self) -> List[Dict[str, Any]]:

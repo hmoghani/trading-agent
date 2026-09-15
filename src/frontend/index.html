@@ -640,6 +640,68 @@
             class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-white font-mono uppercase focus:outline-none focus:border-rhGreen"
           />
         </div>
+
+        <!-- Automated Profit-Taking & Risk Controls -->
+        <div class="pt-3 border-t border-rhBorder/60">
+          <h4 class="text-xs font-bold text-rhGreen flex items-center gap-1.5 mb-2.5">
+            <span>🎯</span> Automated Profit-Taking & Position Management
+          </h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-gray-400 mb-1 font-medium">Take-Profit Target (%)</label>
+              <div class="relative">
+                <input
+                  id="setting-take-profit"
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-rhGreen font-mono focus:outline-none focus:border-rhGreen"
+                  placeholder="3.0"
+                />
+                <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
+              </div>
+              <p class="text-[10px] text-gray-500 mt-1">Sells position to lock in cash profit</p>
+            </div>
+            <div>
+              <label class="block text-gray-400 mb-1 font-medium">Stop-Loss Limit (%)</label>
+              <div class="relative">
+                <input
+                  id="setting-stop-loss"
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-rose-400 font-mono focus:outline-none focus:border-rose-500"
+                  placeholder="2.0"
+                />
+                <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
+              </div>
+              <p class="text-[10px] text-gray-500 mt-1">Sells position to prevent deep loss</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4 mt-3">
+            <div>
+              <label class="block text-gray-400 mb-1 font-medium">Trailing Stop (%)</label>
+              <div class="relative">
+                <input
+                  id="setting-trailing-stop"
+                  type="number"
+                  step="0.1"
+                  min="0.5"
+                  class="w-full bg-rhDark border border-rhBorder rounded-xl py-2 px-3 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-400"
+                  placeholder="1.8"
+                />
+                <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
+              </div>
+              <p class="text-[10px] text-gray-500 mt-1">Trails peak price to protect gains</p>
+            </div>
+            <div class="flex items-center pt-4">
+              <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input id="setting-enable-trailing-stop" type="checkbox" class="w-4 h-4 rounded border-rhBorder text-rhGreen focus:ring-0 cursor-pointer bg-rhDark" checked>
+                <span>Enable Trailing Stop</span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="px-6 py-4 border-t border-rhBorder flex items-center justify-end gap-3 bg-rhDark/60">
@@ -1348,11 +1410,23 @@
 
         list.innerHTML = trades.map(t => {
           const isBuy = t.side === 'buy';
+          let badgeText = t.side.toUpperCase();
+          let badgeClass = isBuy ? 'bg-rhGreen/20 text-rhGreen' : 'bg-rhRed/20 text-rhRed';
+          if (t.rationale && t.rationale.includes('TAKE PROFIT')) {
+            badgeText = '🎯 TAKE PROFIT';
+            badgeClass = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+          } else if (t.rationale && t.rationale.includes('STOP LOSS')) {
+            badgeText = '🛑 STOP LOSS';
+            badgeClass = 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
+          } else if (t.rationale && t.rationale.includes('TRAILING STOP')) {
+            badgeText = '⚡ TRAIL STOP';
+            badgeClass = 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
+          }
           return `
             <div class="p-3 rounded-xl bg-rhDark/60 border border-rhBorder flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <span class="px-2 py-0.5 rounded font-bold text-xs ${isBuy ? 'bg-rhGreen/20 text-rhGreen' : 'bg-rhRed/20 text-rhRed'} font-mono uppercase">
-                  ${t.side}
+                <span class="px-2 py-0.5 rounded font-bold text-[11px] ${badgeClass} font-mono uppercase">
+                  ${badgeText}
                 </span>
                 <div>
                   <div class="flex items-center gap-2">
@@ -1650,7 +1724,27 @@
     }
 
     // Settings Modal
-    function openSettingsModal() {
+    async function openSettingsModal() {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          const s = data.settings || {};
+          const eng = data.engine || {};
+          if (s.dry_run !== undefined) document.getElementById('setting-env-select').value = s.dry_run ? 'paper' : 'live';
+          if (s.execution_mode) document.getElementById('setting-execution-mode').value = s.execution_mode;
+          if (eng.active_strategy) document.getElementById('setting-active-strategy').value = eng.active_strategy;
+          if (s.max_order_usd !== undefined) document.getElementById('setting-max-order').value = s.max_order_usd;
+          if (s.daily_trade_limit_usd !== undefined) document.getElementById('setting-daily-limit').value = s.daily_trade_limit_usd;
+          if (s.whitelisted_symbols) document.getElementById('setting-whitelist').value = s.whitelisted_symbols.join(', ');
+          if (s.take_profit_percent !== undefined) document.getElementById('setting-take-profit').value = s.take_profit_percent;
+          if (s.stop_loss_percent !== undefined) document.getElementById('setting-stop-loss').value = s.stop_loss_percent;
+          if (s.trailing_stop_percent !== undefined) document.getElementById('setting-trailing-stop').value = s.trailing_stop_percent;
+          if (s.enable_trailing_stop !== undefined) document.getElementById('setting-enable-trailing-stop').checked = s.enable_trailing_stop;
+        }
+      } catch (e) {
+        document.getElementById('setting-env-select').value = activeEnvironment;
+      }
       document.getElementById('settings-modal').classList.remove('hidden');
     }
 
@@ -1666,11 +1760,26 @@
       const daily_trade_limit_usd = parseFloat(document.getElementById('setting-daily-limit').value || "500");
       const asset_whitelist = document.getElementById('setting-whitelist').value.trim();
       const active_strategy = document.getElementById('setting-active-strategy').value;
+      const take_profit_percent = parseFloat(document.getElementById('setting-take-profit').value || "3.0");
+      const stop_loss_percent = parseFloat(document.getElementById('setting-stop-loss').value || "2.0");
+      const trailing_stop_percent = parseFloat(document.getElementById('setting-trailing-stop').value || "1.8");
+      const enable_trailing_stop = document.getElementById('setting-enable-trailing-stop').checked;
 
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dry_run, execution_mode, max_order_usd, daily_trade_limit_usd, asset_whitelist, active_strategy })
+        body: JSON.stringify({
+          dry_run,
+          execution_mode,
+          max_order_usd,
+          daily_trade_limit_usd,
+          asset_whitelist,
+          active_strategy,
+          take_profit_percent,
+          stop_loss_percent,
+          trailing_stop_percent,
+          enable_trailing_stop,
+        })
       });
 
       closeSettingsModal();

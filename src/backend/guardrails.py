@@ -57,10 +57,17 @@ class RiskGuard:
             prev_peak = self._peak_prices.get(symbol, current_price)
             self._peak_prices[symbol] = max(prev_peak, current_price)
 
+    def clear_peak_price(self, symbol: str) -> None:
+        """Clear high water mark price when position is liquidated."""
+        with self._lock:
+            self._peak_prices.pop(symbol, None)
+
     def should_trigger_trailing_stop(self, symbol: str, current_price: float, trail_percent: float = 2.5) -> bool:
         """Return True if price dropped more than trail_percent below peak price."""
         with self._lock:
             peak = self._peak_prices.get(symbol, current_price)
+            if peak <= 0:
+                return False
             drop = ((peak - current_price) / peak) * 100
             return drop >= trail_percent
 
@@ -81,6 +88,10 @@ class RiskGuard:
                 "strategy_interval_seconds": settings.strategy_interval_seconds,
                 "circuit_breaker_active": self._circuit_breaker_active,
                 "max_drawdown_percent": self._max_drawdown_percent,
+                "take_profit_percent": settings.take_profit_percent,
+                "stop_loss_percent": settings.stop_loss_percent,
+                "trailing_stop_percent": settings.trailing_stop_percent,
+                "enable_trailing_stop": settings.enable_trailing_stop,
             }
 
     def validate_order(
@@ -127,8 +138,8 @@ class RiskGuard:
                 f"({', '.join(settings.whitelisted_symbols)})."
             )
 
-        # 3. Single Order Ceiling Check
-        if amount_usd > settings.max_order_usd:
+        # 3. Single Order Ceiling Check (Applies to purchases; position liquidations can exit full value)
+        if side == "buy" and amount_usd > settings.max_order_usd:
             raise GuardrailViolation(
                 f"Order Limit Violation: Estimated order value ${amount_usd:.2f} for {symbol} "
                 f"exceeds maximum allowed order cap of ${settings.max_order_usd:.2f}."

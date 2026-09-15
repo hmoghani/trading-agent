@@ -8,13 +8,16 @@ from src.backend.guardrails import risk_guard
 
 @pytest.fixture(autouse=True)
 def reset_engine():
+    from src.backend.mcp_client import mcp_client
     engine.stop()
     risk_guard.reset()
     settings.execution_mode = "autonomous"
     settings.dry_run = True
+    mcp_client.paper.reset()
     yield
     engine.stop()
     risk_guard.reset()
+    mcp_client.paper.reset()
 
 
 @pytest.mark.asyncio
@@ -70,3 +73,137 @@ async def test_autonomous_mode_executes_directly():
     trades = risk_guard.get_trade_history()
     assert len(trades) >= 1
     assert trades[0]["side"] == "buy"
+
+
+@pytest.mark.asyncio
+async def test_position_take_profit_triggers_autonomous_sell():
+    """Verify an open position exceeding take_profit_percent triggers an automated SELL order."""
+    from src.backend.mcp_client import mcp_client
+    settings.execution_mode = "autonomous"
+    settings.take_profit_percent = 3.0
+
+    # Seed an open position in paper account with +4.0% gain
+    mcp_client.paper.positions["NVDA"] = {
+        "quantity": 1.0,
+        "average_buy_price": 100.0,
+    }
+    # Mock current price to $104.00 (+4.0%)
+    async def mock_get_quote(symbol):
+        return {"symbol": "NVDA", "last_trade_price": 104.0, "previous_close": 100.0}
+
+    original_get_quote = mcp_client.get_quote
+    mcp_client.get_quote = mock_get_quote
+
+    try:
+        exits = await engine.evaluate_open_positions()
+        assert len(exits) == 1
+        exit_receipt = exits[0]
+        assert exit_receipt["symbol"] == "NVDA"
+        assert exit_receipt["side"] == "sell"
+        assert "TAKE PROFIT" in exit_receipt["rationale"]
+        # Position should be closed
+        assert "NVDA" not in mcp_client.paper.positions
+    finally:
+        mcp_client.get_quote = original_get_quote
+        mcp_client.paper.positions.clear()
+
+
+@pytest.mark.asyncio
+async def test_position_stop_loss_triggers_autonomous_sell():
+    """Verify an open position dropping below stop_loss_percent triggers an automated SELL order."""
+    from src.backend.mcp_client import mcp_client
+    settings.execution_mode = "autonomous"
+    settings.stop_loss_percent = 2.0
+
+    # Seed an open position in paper account with -3.0% loss
+    mcp_client.paper.positions["AAPL"] = {
+        "quantity": 1.0,
+        "average_buy_price": 200.0,
+    }
+    # Mock current price to $194.00 (-3.0%)
+    async def mock_get_quote(symbol):
+        return {"symbol": "AAPL", "last_trade_price": 194.0, "previous_close": 200.0}
+
+    original_get_quote = mcp_client.get_quote
+    mcp_client.get_quote = mock_get_quote
+
+    try:
+        exits = await engine.evaluate_open_positions()
+        assert len(exits) == 1
+        exit_receipt = exits[0]
+        assert exit_receipt["symbol"] == "AAPL"
+        assert exit_receipt["side"] == "sell"
+        assert "STOP LOSS" in exit_receipt["rationale"]
+        # Position should be closed
+        assert "AAPL" not in mcp_client.paper.positions
+    finally:
+        mcp_client.get_quote = original_get_quote
+        mcp_client.paper.positions.clear()
+
+
+@pytest.mark.asyncio
+async def test_position_trailing_stop_triggers_sell():
+    """Verify a position pulling back from a tracked peak triggers trailing stop SELL order."""
+    from src.backend.mcp_client import mcp_client
+    settings.execution_mode = "autonomous"
+    settings.enable_trailing_stop = True
+    settings.trailing_stop_percent = 1.5
+
+    # Seed open position
+    mcp_client.paper.positions["SPY"] = {
+        "quantity": 1.0,
+        "average_buy_price": 500.0,
+    }
+    # Seed peak price at $515.00 (+3.0%)
+    risk_guard._peak_prices["SPY"] = 515.0
+
+    # Current price pulled back to $505.00 (pullback of 1.94% from peak $515.00, net gain is still +1.0%)
+    async def mock_get_quote(symbol):
+        return {"symbol": "SPY", "last_trade_price": 505.0, "previous_close": 500.0}
+
+    original_get_quote = mcp_client.get_quote
+    mcp_client.get_quote = mock_get_quote
+
+    try:
+        exits = await engine.evaluate_open_positions()
+        assert len(exits) == 1
+        exit_receipt = exits[0]
+        assert exit_receipt["symbol"] == "SPY"
+        assert exit_receipt["side"] == "sell"
+        assert "TRAILING STOP" in exit_receipt["rationale"]
+    finally:
+        mcp_client.get_quote = original_get_quote
+        mcp_client.paper.positions.clear()
+        risk_guard.clear_peak_price("SPY")
+
+
+@pytest.mark.asyncio
+async def test_supervised_mode_creates_sell_proposal():
+    """Verify supervised mode generates a proposal card for take-profit exits instead of executing directly."""
+    from src.backend.mcp_client import mcp_client
+    settings.execution_mode = "supervised"
+    settings.take_profit_percent = 2.5
+
+    mcp_client.paper.positions["NVDA"] = {
+        "quantity": 1.0,
+        "average_buy_price": 100.0,
+    }
+    async def mock_get_quote(symbol):
+        return {"symbol": "NVDA", "last_trade_price": 103.0, "previous_close": 100.0}
+
+    original_get_quote = mcp_client.get_quote
+    mcp_client.get_quote = mock_get_quote
+
+    try:
+        exits = await engine.evaluate_open_positions()
+        # In supervised mode, no direct execution
+        assert len(exits) == 0
+        proposals = engine.get_pending_proposals()
+        assert len(proposals) == 1
+        assert proposals[0]["side"] == "sell"
+        assert proposals[0]["symbol"] == "NVDA"
+        assert proposals[0]["badge"] == "TAKE_PROFIT"
+    finally:
+        mcp_client.get_quote = original_get_quote
+        mcp_client.paper.positions.clear()
+        engine._pending_proposals.clear()

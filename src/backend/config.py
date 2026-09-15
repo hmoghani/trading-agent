@@ -58,6 +58,24 @@ class Settings(BaseSettings):
         description="Comma-separated list of symbols the agent is permitted to trade",
     )
 
+    # Automated Position Exit & Profit-Taking Controls
+    take_profit_percent: float = Field(
+        default=3.0,
+        description="Target unrealized gain percentage to trigger an automated take-profit SELL order",
+    )
+    stop_loss_percent: float = Field(
+        default=2.0,
+        description="Maximum unrealized loss percentage to trigger an automated stop-loss SELL order",
+    )
+    trailing_stop_percent: float = Field(
+        default=1.8,
+        description="Percentage pullback from recent peak price to trigger trailing stop SELL order",
+    )
+    enable_trailing_stop: bool = Field(
+        default=True,
+        description="Whether trailing stop protection is active for profitable positions",
+    )
+
     # Autonomous Strategy Loop
     strategy_interval_seconds: int = Field(
         default=300,

@@ -292,4 +292,33 @@ async def test_pairs_divergence_strategy_evaluate():
     assert isinstance(recs, list)
 
 
+def test_settings_api_get_and_update(auth_client):
+    """Verify GET /api/settings and POST /api/settings support take-profit and stop-loss configuration."""
+    # 1. GET settings
+    get_res = auth_client.get("/api/settings")
+    assert get_res.status_code == 200
+    data = get_res.json()
+    assert data["status"] == "success"
+    assert "take_profit_percent" in data["settings"]
+    assert "stop_loss_percent" in data["settings"]
+
+    # 2. Update settings
+    update_res = auth_client.post(
+        "/api/settings",
+        json={
+            "take_profit_percent": 4.5,
+            "stop_loss_percent": 1.5,
+            "trailing_stop_percent": 2.0,
+            "enable_trailing_stop": True,
+        },
+    )
+    assert update_res.status_code == 200
+    updated = update_res.json()["settings"]
+    assert updated["take_profit_percent"] == 4.5
+    assert updated["stop_loss_percent"] == 1.5
+    assert updated["trailing_stop_percent"] == 2.0
+    assert updated["enable_trailing_stop"] is True
+
+
+
 

@@ -464,6 +464,10 @@ class UpdateSettingsPayload(BaseModel):
     daily_trade_limit_usd: Optional[float] = None
     asset_whitelist: Optional[str] = None
     active_strategy: Optional[str] = None
+    take_profit_percent: Optional[float] = None
+    stop_loss_percent: Optional[float] = None
+    trailing_stop_percent: Optional[float] = None
+    enable_trailing_stop: Optional[bool] = None
 
 
 @app.get("/api/strategies")
@@ -473,6 +477,16 @@ async def get_available_strategies(user: Dict[str, Any] = Depends(get_current_us
     return {
         "active_strategy": engine.active_strategy_name,
         "strategies": strategies_list,
+    }
+
+
+@app.get("/api/settings")
+async def get_settings(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Retrieve current platform settings, risk guardrails, and active strategy."""
+    return {
+        "status": "success",
+        "settings": risk_guard.get_status(),
+        "engine": engine.get_status(),
     }
 
 
@@ -491,11 +505,23 @@ async def update_settings(payload: UpdateSettingsPayload, user: Dict[str, Any] =
         settings.asset_whitelist = payload.asset_whitelist
     if payload.active_strategy and payload.active_strategy in AVAILABLE_STRATEGIES:
         engine.active_strategy_name = payload.active_strategy
+    if payload.take_profit_percent is not None and payload.take_profit_percent > 0:
+        settings.take_profit_percent = payload.take_profit_percent
+    if payload.stop_loss_percent is not None and payload.stop_loss_percent > 0:
+        settings.stop_loss_percent = payload.stop_loss_percent
+    if payload.trailing_stop_percent is not None and payload.trailing_stop_percent > 0:
+        settings.trailing_stop_percent = payload.trailing_stop_percent
+    if payload.enable_trailing_stop is not None:
+        settings.enable_trailing_stop = payload.enable_trailing_stop
 
     await engine.broadcast_event("settings_updated", {
         "execution_mode": settings.execution_mode,
         "dry_run": settings.dry_run,
         "active_strategy": engine.active_strategy_name,
+        "take_profit_percent": settings.take_profit_percent,
+        "stop_loss_percent": settings.stop_loss_percent,
+        "trailing_stop_percent": settings.trailing_stop_percent,
+        "enable_trailing_stop": settings.enable_trailing_stop,
     })
 
     return {
