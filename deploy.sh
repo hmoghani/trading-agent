@@ -4,7 +4,7 @@ set -e
 # Configuration
 IMAGE_NAME="${DOCKER_IMAGE:-hmoghani/robinhood-agent:latest}"
 NAMESPACE="${K8S_NAMESPACE:-robinhood}"
-PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
+PLATFORM="${DOCKER_PLATFORM:-linux/arm64}"
 
 echo "=================================================="
 echo "🚀 Robinhood Agentic Trading Deployment Automation"
