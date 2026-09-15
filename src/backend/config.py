@@ -19,6 +19,10 @@ class Settings(BaseSettings):
         default="",
         description="Google Gemini API key for agent reasoning",
     )
+    gemini_model: str = Field(
+        default="gemini-3.6-flash",
+        description="Google Gemini model identifier (e.g. gemini-3.6-flash or gemini-3.5-flash-lite)",
+    )
 
     # Web Authentication & Master Password Gate
     dashboard_password: str = Field(

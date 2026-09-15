@@ -99,14 +99,24 @@ class GeminiTradingAgent:
                 )
                 from google import genai
                 client = genai.Client(api_key=self.api_key)
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=[
-                        {"role": "user", "parts": [{"text": context_prompt + "\nUser question: " + user_clean}]}
-                    ],
-                )
-                if response and response.text:
-                    return response.text
+                candidate_models = []
+                for m in [getattr(settings, "gemini_model", "gemini-3.6-flash"), "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                    if m and m not in candidate_models:
+                        candidate_models.append(m)
+                
+                for target_model in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=target_model,
+                            contents=[
+                                {"role": "user", "parts": [{"text": context_prompt + "\nUser question: " + user_clean}]}
+                            ],
+                        )
+                        if response and response.text:
+                            return response.text
+                    except Exception as model_err:
+                        logger.warning(f"Copilot model {target_model} failed: {model_err}")
+                        continue
             except Exception as e:
                 logger.warning(f"Google GenAI SDK call failed, falling back to local copilot reasoning: {e}")
 

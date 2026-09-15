@@ -101,25 +101,41 @@ Respond strictly in valid JSON with this exact schema:
 }}
 Rule: If consensus_score >= 70 and side aligns with risk limits, verdict is "APPROVED". Otherwise "VETOED".
 """
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                )
-                text = response.text.strip()
-                if text.startswith("```json"):
-                    text = text[7:]
-                if text.endswith("```"):
-                    text = text[:-3]
-                parsed = json.loads(text.strip())
-                parsed["id"] = f"delib-{int(datetime.now().timestamp() * 1000)}"
-                parsed["symbol"] = symbol
-                parsed["side"] = side
-                parsed["amount_usd"] = amount_usd
-                parsed["current_price"] = current_price
-                parsed["timestamp"] = now_iso
-                return parsed
+                candidate_models = []
+                for m in [getattr(settings, "gemini_model", "gemini-3.6-flash"), "gemini-3.6-flash", "gemini-3.5-flash-lite"]:
+                    if m and m not in candidate_models:
+                        candidate_models.append(m)
+
+                last_err = None
+                for target_model in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=target_model,
+                            contents=prompt,
+                        )
+                        if response and response.text:
+                            text = response.text.strip()
+                            if text.startswith("```json"):
+                                text = text[7:]
+                            if text.endswith("```"):
+                                text = text[:-3]
+                            parsed = json.loads(text.strip())
+                            parsed["id"] = f"delib-{int(datetime.now().timestamp() * 1000)}"
+                            parsed["symbol"] = symbol
+                            parsed["side"] = side
+                            parsed["amount_usd"] = amount_usd
+                            parsed["current_price"] = current_price
+                            parsed["timestamp"] = now_iso
+                            parsed["model_used"] = target_model
+                            return parsed
+                    except Exception as model_err:
+                        last_err = model_err
+                        logger.warning(f"Gemini model {target_model} deliberation error: {model_err}")
+                        continue
+                if last_err:
+                    logger.warning(f"All Gemini models failed ({last_err}). Falling back to internal engine.")
             except Exception as e:
-                logger.warning(f"Gemini API deliberation error: {e}. Falling back to internal engine.")
+                logger.warning(f"Gemini API setup error: {e}. Falling back to internal engine.")
 
         # Algorithmic persona consensus engine
         if side == "buy":

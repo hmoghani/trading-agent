@@ -12,6 +12,7 @@ data:
   DAILY_TRADE_LIMIT_USD: "500.0"
   ASSET_WHITELIST: "SPY,QQQ,AAPL,NVDA,TSLA"
   STRATEGY_INTERVAL_SECONDS: "300"
+  GEMINI_MODEL: "gemini-3.6-flash"
   ROBINHOOD_MCP_URL: "https://agent.robinhood.com/mcp/trading"
   HOST: "0.0.0.0"
   PORT: "8000"
