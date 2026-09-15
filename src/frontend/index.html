@@ -1438,7 +1438,7 @@
               </div>
               <div class="text-right text-[11px] text-gray-400 font-mono">
                 <span class="px-1.5 py-0.5 rounded bg-rhDark border border-rhBorder text-emerald-400">${t.status || 'filled'}</span>
-                <div class="mt-1 text-gray-500">${new Date(t.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                <div class="mt-1 text-gray-500">${t.timestamp ? new Date(t.timestamp).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : 'Just now'}</div>
               </div>
             </div>
           `;
