@@ -92,6 +92,7 @@ class RiskGuard:
                 "stop_loss_percent": settings.stop_loss_percent,
                 "trailing_stop_percent": settings.trailing_stop_percent,
                 "enable_trailing_stop": settings.enable_trailing_stop,
+                "allow_after_hours": settings.allow_after_hours,
             }
 
     def validate_order(

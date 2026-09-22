@@ -104,6 +104,7 @@ class RobinhoodMCPBridge:
         self._active_account_number: Optional[str] = None
         self._agentic_account_number: Optional[str] = None
         self._cache: Dict[str, Tuple[float, Any]] = {}
+        self._last_known_quotes: Dict[str, Dict[str, Any]] = {}
 
     def is_authenticated(self) -> bool:
         """Check if Robinhood OAuth authentication token exists in ~/.mcp-auth."""
@@ -295,22 +296,49 @@ class RobinhoodMCPBridge:
                             "updated_at": updated,
                         }
                     if quotes_map:
+                        for k, v in quotes_map.items():
+                            if v.get("last_trade_price", 0) > 0:
+                                self._last_known_quotes[k] = v
                         self._set_cache(cache_key, quotes_map)
                         return quotes_map
             except Exception as e:
                 logger.warning(f"Robinhood MCP get_equity_quotes error: {e}")
 
-        # Fallback for offline development / unit tests
+        # Fallback for offline development / unit tests / network error:
+        TEST_BASELINE_PRICES = {
+            "SPY": 585.0,
+            "QQQ": 490.0,
+            "AAPL": 230.0,
+            "NVDA": 130.0,
+            "TSLA": 240.0,
+        }
         for s in symbols:
-            quotes_map[s] = {
-                "symbol": s,
-                "name": s,
-                "last_trade_price": 100.0,
-                "bid_price": 99.95,
-                "ask_price": 100.05,
-                "previous_close": 99.00,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            if s in self._last_known_quotes:
+                quotes_map[s] = dict(self._last_known_quotes[s])
+            elif not self.is_authenticated():
+                # Unit tests / offline dev baseline
+                base = TEST_BASELINE_PRICES.get(s, 100.0)
+                quotes_map[s] = {
+                    "symbol": s,
+                    "name": s,
+                    "last_trade_price": base,
+                    "bid_price": base - 0.05,
+                    "ask_price": base + 0.05,
+                    "previous_close": round(base * 0.99, 2),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "is_fallback": True,
+                }
+            else:
+                quotes_map[s] = {
+                    "symbol": s,
+                    "name": s,
+                    "last_trade_price": 0.0,
+                    "bid_price": 0.0,
+                    "ask_price": 0.0,
+                    "previous_close": 0.0,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "is_fallback": True,
+                }
         return quotes_map
 
     async def get_equity_historicals(
@@ -754,7 +782,12 @@ class PaperTradingAccount:
         result = []
         for sym, pos in self.positions.items():
             quote = await quotes_lookup_fn(sym)
-            curr_p = float(quote.get("last_trade_price", pos["average_buy_price"]))
+            raw_curr = quote.get("last_trade_price")
+            # If quote is missing, <= 0, or unverified fallback, preserve entry price so PnL stays 0%
+            if raw_curr is None or float(raw_curr) <= 0 or quote.get("is_fallback"):
+                curr_p = float(pos["average_buy_price"])
+            else:
+                curr_p = float(raw_curr)
             mv = round(pos["quantity"] * curr_p, 2)
             cost_basis = round(pos["quantity"] * pos["average_buy_price"], 2)
             pnl_usd = round(mv - cost_basis, 2)
@@ -781,7 +814,7 @@ class PaperTradingAccount:
     ) -> Dict[str, Any]:
         """Execute a simulated order with paper cash and share allocation."""
         if current_price <= 0:
-            current_price = 100.0
+            current_price = self.positions.get(symbol, {}).get("average_buy_price", 100.0)
 
         shares = round(amount_usd / current_price, 4)
 
@@ -953,14 +986,16 @@ class RobinhoodMCPClient:
         quotes_map = await mcp_bridge.get_equity_quotes([sym])
         quote = quotes_map.get(sym, {})
         name = self._symbol_registry.get(sym, {}).get("name", f"{sym} Inc.")
+        price = float(quote.get("last_trade_price", 0.0) or 0.0)
         return {
             "symbol": sym,
             "name": name,
-            "last_trade_price": quote.get("last_trade_price", 100.0),
-            "bid_price": quote.get("bid_price", 99.95),
-            "ask_price": quote.get("ask_price", 100.05),
-            "previous_close": quote.get("previous_close", 100.0),
+            "last_trade_price": price,
+            "bid_price": float(quote.get("bid_price", 0.0) or 0.0),
+            "ask_price": float(quote.get("ask_price", 0.0) or 0.0),
+            "previous_close": float(quote.get("previous_close", price) or price),
             "updated_at": quote.get("updated_at", datetime.now(timezone.utc).isoformat()),
+            "is_fallback": quote.get("is_fallback", False),
         }
 
     async def get_historicals(self, symbol: str, timeframe: str = "1D") -> List[Dict[str, Any]]:

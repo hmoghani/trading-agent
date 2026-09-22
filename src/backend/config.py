@@ -85,6 +85,10 @@ class Settings(BaseSettings):
         default=300,
         description="Interval in seconds between autonomous market evaluation loops",
     )
+    allow_after_hours: bool = Field(
+        default=False,
+        description="Whether to permit autonomous trading outside Regular Trading Hours (9:30 AM - 4:00 PM ET)",
+    )
 
     # Robinhood MCP Endpoint
     robinhood_mcp_url: str = Field(

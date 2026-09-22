@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import uuid
 from src.backend.config import settings
 from src.backend.guardrails import GuardrailViolation, risk_guard
+from src.backend.market_hours import get_market_status, is_market_open
 from src.backend.mcp_client import mcp_client
 from src.backend.strategies import AVAILABLE_STRATEGIES, BaseStrategy
 
@@ -123,6 +124,10 @@ class AutonomousTradingEngine:
         
         Returns list of executed or proposed exit actions.
         """
+        if not settings.allow_after_hours and not is_market_open():
+            logger.debug("Market closed. Skipping position lifecycle evaluation.")
+            return []
+
         exits: List[Dict[str, Any]] = []
         try:
             positions = await mcp_client.get_positions()
@@ -161,6 +166,17 @@ class AutonomousTradingEngine:
             # Calculate exact unrealized PnL % and USD
             pnl_pct = ((current_price - avg_buy) / avg_buy) * 100
             pnl_usd = (current_price - avg_buy) * quantity
+
+            # Anti-Anomaly Safeguard:
+            # If quote indicates an impossible single-tick plunge (e.g. <= -25.0% for equities)
+            # or matches an unverified fallback, reject it to protect positions from phantom liquidations.
+            if pnl_pct <= -25.0:
+                logger.warning(
+                    f"⚠️ Anomaly Guard: Skipping exit for {symbol}. "
+                    f"Recorded quote ${current_price:.2f} vs entry ${avg_buy:.2f} ({pnl_pct:+.2f}%) "
+                    f"likely indicates stale, offline, or fallback market data."
+                )
+                continue
 
             # Update peak price for trailing stop
             risk_guard.update_peak_price(symbol, current_price)
@@ -248,14 +264,19 @@ class AutonomousTradingEngine:
                         logger.error(f"Failed to execute autonomous SELL for {symbol}: {ex}")
                 else:
                     # Supervised mode: create proposal card for user approval
-                    proposal_id = f"prop-{uuid.uuid4().hex[:8]}"
+                    proposal_id = f"prop-exit-{int(datetime.now().timestamp() * 1000)}"
                     proposal = {
                         "id": proposal_id,
                         "symbol": symbol,
                         "side": "sell",
                         "badge": exit_badge,
                         "amount_usd": trade_amount_usd,
+                        "shares": quantity,
+                        "current_price": current_price,
+                        "pnl_percent": round(pnl_pct, 2),
+                        "pnl_usd": round(pnl_usd, 2),
                         "rationale": exit_reason,
+                        "status": "pending",
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     }
                     self._pending_proposals[proposal_id] = proposal
@@ -277,15 +298,14 @@ class AutonomousTradingEngine:
             logger.warning(f"Unknown strategy: {self.active_strategy_name}")
             return
 
-        # Regular Trading Hours (RTH) Enforcement for Live Brokerage Orders
-        from src.backend.market_hours import is_market_open, get_market_status
-        if not settings.dry_run and not is_market_open():
+        # Regular Trading Hours (RTH) Enforcement
+        if not settings.allow_after_hours and not is_market_open():
             status = get_market_status()
-            logger.info(f"Market Closed ({status['status_text']}). Autonomous engine standing by for Live trading.")
+            logger.info(f"Market Closed ({status['status_text']}). Autonomous engine standing by.")
             await self.broadcast_event(
                 "market_closed_standby",
                 {
-                    "message": f"Market Closed ({status['status_text']}). Live engine in standby until next open on {status['next_open_et']}.",
+                    "message": f"Market Closed ({status['status_text']}). Autonomous engine in standby until next open on {status['next_open_et']}.",
                     "current_time_et": status["current_time_et"],
                     "next_open_et": status["next_open_et"],
                     "session": status["session"],

@@ -13,6 +13,7 @@ def reset_engine():
     risk_guard.reset()
     settings.execution_mode = "autonomous"
     settings.dry_run = True
+    settings.allow_after_hours = True
     mcp_client.paper.reset()
     yield
     engine.stop()
@@ -207,3 +208,47 @@ async def test_supervised_mode_creates_sell_proposal():
         mcp_client.get_quote = original_get_quote
         mcp_client.paper.positions.clear()
         engine._pending_proposals.clear()
+
+
+@pytest.mark.asyncio
+async def test_anomalous_quote_does_not_trigger_phantom_stop_loss():
+    """Verify an anomalous quote (e.g. -70% drop or fallback 100.0) is rejected and does not sell position."""
+    from src.backend.mcp_client import mcp_client
+    settings.execution_mode = "autonomous"
+    settings.stop_loss_percent = 2.0
+
+    # Seed AAPL at $331.00
+    mcp_client.paper.positions["AAPL"] = {
+        "quantity": 2.0,
+        "average_buy_price": 331.00,
+    }
+
+    # Simulate quote returning corrupted/fallback $100.00 (-69.8%)
+    async def mock_get_quote(symbol):
+        return {"symbol": "AAPL", "last_trade_price": 100.0, "previous_close": 331.0}
+
+    original_get_quote = mcp_client.get_quote
+    mcp_client.get_quote = mock_get_quote
+
+    try:
+        exits = await engine.evaluate_open_positions()
+        # Anomaly guard must abort the liquidation!
+        assert len(exits) == 0
+        # Position must remain intact
+        assert "AAPL" in mcp_client.paper.positions
+    finally:
+        mcp_client.get_quote = original_get_quote
+        mcp_client.paper.positions.clear()
+
+
+@pytest.mark.asyncio
+async def test_market_closed_blocks_execution_cycle_when_after_hours_disabled():
+    """Verify execution cycle enters standby when market is closed and allow_after_hours is False."""
+    from unittest.mock import patch
+    settings.allow_after_hours = False
+
+    with patch("src.backend.engine.is_market_open", return_value=False):
+        await engine.execute_cycle()
+        # No proposals or trades should be created
+        assert len(engine.get_pending_proposals()) == 0
+        assert len(risk_guard.get_trade_history()) == 0

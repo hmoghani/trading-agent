@@ -693,12 +693,18 @@
                 <span class="absolute right-3 top-2 text-gray-400 text-xs">%</span>
               </div>
               <p class="text-[10px] text-gray-500 mt-1">Trails peak price to protect gains</p>
-            </div>
             <div class="flex items-center pt-4">
               <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
                 <input id="setting-enable-trailing-stop" type="checkbox" class="w-4 h-4 rounded border-rhBorder text-rhGreen focus:ring-0 cursor-pointer bg-rhDark" checked>
                 <span>Enable Trailing Stop</span>
               </label>
+            </div>
+            <div class="col-span-2 pt-2 border-t border-rhBorder/40">
+              <label class="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                <input id="setting-allow-after-hours" type="checkbox" class="w-4 h-4 rounded border-rhBorder text-rhGreen focus:ring-0 cursor-pointer bg-rhDark">
+                <span>Allow After-Hours Trading</span>
+              </label>
+              <p class="text-[10px] text-gray-500 ml-6 mt-0.5">When unchecked (recommended), the bot strictly sleeps outside 9:30 AM – 4:00 PM ET to prevent off-hours spread slippage and phantom stop losses.</p>
             </div>
           </div>
         </div>
@@ -1741,6 +1747,7 @@
           if (s.stop_loss_percent !== undefined) document.getElementById('setting-stop-loss').value = s.stop_loss_percent;
           if (s.trailing_stop_percent !== undefined) document.getElementById('setting-trailing-stop').value = s.trailing_stop_percent;
           if (s.enable_trailing_stop !== undefined) document.getElementById('setting-enable-trailing-stop').checked = s.enable_trailing_stop;
+          if (s.allow_after_hours !== undefined) document.getElementById('setting-allow-after-hours').checked = s.allow_after_hours;
         }
       } catch (e) {
         document.getElementById('setting-env-select').value = activeEnvironment;
@@ -1764,6 +1771,7 @@
       const stop_loss_percent = parseFloat(document.getElementById('setting-stop-loss').value || "2.0");
       const trailing_stop_percent = parseFloat(document.getElementById('setting-trailing-stop').value || "1.8");
       const enable_trailing_stop = document.getElementById('setting-enable-trailing-stop').checked;
+      const allow_after_hours = document.getElementById('setting-allow-after-hours').checked;
 
       await fetch('/api/settings', {
         method: 'POST',
@@ -1779,6 +1787,7 @@
           stop_loss_percent,
           trailing_stop_percent,
           enable_trailing_stop,
+          allow_after_hours,
         })
       });
 

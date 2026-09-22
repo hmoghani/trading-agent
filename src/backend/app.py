@@ -468,6 +468,7 @@ class UpdateSettingsPayload(BaseModel):
     stop_loss_percent: Optional[float] = None
     trailing_stop_percent: Optional[float] = None
     enable_trailing_stop: Optional[bool] = None
+    allow_after_hours: Optional[bool] = None
 
 
 @app.get("/api/strategies")
@@ -513,6 +514,8 @@ async def update_settings(payload: UpdateSettingsPayload, user: Dict[str, Any] =
         settings.trailing_stop_percent = payload.trailing_stop_percent
     if payload.enable_trailing_stop is not None:
         settings.enable_trailing_stop = payload.enable_trailing_stop
+    if payload.allow_after_hours is not None:
+        settings.allow_after_hours = payload.allow_after_hours
 
     await engine.broadcast_event("settings_updated", {
         "execution_mode": settings.execution_mode,
@@ -522,6 +525,7 @@ async def update_settings(payload: UpdateSettingsPayload, user: Dict[str, Any] =
         "stop_loss_percent": settings.stop_loss_percent,
         "trailing_stop_percent": settings.trailing_stop_percent,
         "enable_trailing_stop": settings.enable_trailing_stop,
+        "allow_after_hours": settings.allow_after_hours,
     })
 
     return {
